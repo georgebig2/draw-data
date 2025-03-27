@@ -1,4 +1,33 @@
 https://georgebig2.github.io/draw-data/
 5000
 2000
-a2 1
+s1 3
+s2 2
+-s3 4
+s4 3
+-s5 3
+-s6 4
+-n1 3
+-n2 4
+-n3 4
+-n4 4
+t1 3
+-t2 4
+-t3 4
+t4 2
+t5 3
+-t6 4
+-t7 4
+-t8 4
+t9 4
+-c1 1
+c4 1
+--c3 4
+tt1 3
+tt2 3
+--h1 4
+r1 3
+r3 2
+r4 3
+a1 3
+a2 3
