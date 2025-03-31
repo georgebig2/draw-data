@@ -31,6 +31,13 @@
         max-height: 100%;
     }
 
+    .num-img img {
+        display: inline-block;
+        /*position: absolute;*/
+        /*left: 35%;*/
+        max-width: 45%;
+    }
+
     .templates {
         display: inline-block;
         position: absolute;
@@ -42,7 +49,18 @@
         border: 0;
     }
 
-    button {
+    .button-num {
+        /*  border: 0;
+  background: rgb(194, 105, 105);
+  text-shadow: 1px 1px 1px white;
+  border: 1px solid #999;*/
+        /*position: absolute;*/
+        cursor: pointer;
+        /*    top: 5px;
+    left: 5px;*/
+    }
+
+    .button-grid {
         /*  border: 0;
   background: rgb(194, 105, 105);
   text-shadow: 1px 1px 1px white;
@@ -53,7 +71,7 @@
         left: 5px;
     }
 
-    progress {
+    .progress {
         position: absolute;
         top: 35px;
         left: 5px;
@@ -93,13 +111,12 @@
         border: 1px solid #999;
         z-index: 1;
     }
-
-    .thumb {
-        display: block;
-        margin: 0 0;
-        /*cursor: no-drop;*/
-        z-index: -1;
-    }
+    /*.thumb {
+    display: block;
+    margin: 0 0;*/
+    /*cursor: no-drop;*/
+    /*z-index: -1;
+}*/
 </style>
 </head>
 <body>
@@ -113,7 +130,7 @@
         <!--<iframe class="templates" src="https://drive.google.com/embeddedfolderview?id=1ZtdmwAPS5olTNovk5Z99dBiTJLCRC4wS#grid"></iframe>-->
         <img id="imageSrc" alt="" />
         <input type="file" id="fileInput" accept="image/*" style="display:none" />
-        <button id="fileButton" type="button">Open image</button>
+        <button class="button-grid" id="fileButton" type="button">Open image</button>
     </div>
 
     <script type="text/javascript">
