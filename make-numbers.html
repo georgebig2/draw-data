@@ -187,6 +187,14 @@
             "click",
             (e) => {
                 (async () => {
+
+                    if (imgColor.parentNode.childNodes.length > 1)
+                        imgColor.parentNode.removeChild(imgColor.parentNode.lastChild);
+                    if (imgPal.parentNode.childNodes.length > 1)
+                        imgPal.parentNode.removeChild(imgPal.parentNode.lastChild);
+                    if (imgGrd.parentNode.childNodes.length > 1)
+                        imgGrd.parentNode.removeChild(imgGrd.parentNode.lastChild);
+
                     async function loadTex(img) {
                         const image = new Image();
                         image.src = img.src;
