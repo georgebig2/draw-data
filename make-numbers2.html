@@ -1,3 +1,4 @@
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -6,105 +7,105 @@
     <meta http-equiv='expires' content='0'>
     <meta http-equiv='pragma' content='no-cache'>
     <title>Сreate Numbers</title>
+    <script src="enable-threads.js"></script>
     <style>
-        h1 {
-            font-family: helvetica, arial, sans-serif;
-            text-align: center;
-            border: 0;
-            margin: 0;
-        }
+                h1 {
+                    font-family: helvetica, arial, sans-serif;
+                    text-align: center;
+                    border: 0;
+                    margin: 0;
+                }
 
-        body {
-            width: 95vw;
-            /*    margin: 0 auto;
-*/ background-color: rgb(255, 212, 183);
-            padding: 0 20px 20px 20px;
-            /*border: 5px solid black;*/
-        }
+                body {
+                    width: 95vw;
+                    /*    margin: 0 auto;
+        */ background-color: rgb(255, 212, 183);
+                    padding: 0 20px 20px 20px;
+                    /*border: 5px solid black;*/
+                }
 
-        .full-img img {
-            display: inline-block;
-            position: absolute;
-            top: 0;
-            left: 35%;
-            max-height: 100%;
-        }
+                .full-img img {
+                    display: inline-block;
+                    position: absolute;
+                    top: 0;
+                    left: 35%;
+                    max-height: 100%;
+                }
 
-        .num-img {
-            float: left;
-            position: relative;
-        }
+                .num-img {
+                    float: left;
+                    position: relative;
+                }
 
-        .stack {
-            position: relative;
-            top: 0;
-            left: 0;
-            max-width: 40%;
-            cursor: pointer;
-        }
+                .stack {
+                    position: relative;
+                    top: 0;
+                    left: 0;
+                    max-width: 40%;
+                    cursor: pointer;
+                }
 
-        .stack2 {
-            position: absolute;
-            top: 0;
-            left: 0;
-            max-width: 40%;
-            cursor: pointer;
-        }
+                .stack2 {
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    max-width: 40%;
+                    cursor: pointer;
+                }
 
-        .close {
-            position: absolute;
-            top: 0;
-            left: 0;
-            cursor: no-drop;
-        }
+                .close {
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    cursor: no-drop;
+                }
 
-        .templates {
-            display: inline-block;
-            position: absolute;
-            top: 0;
-            left: 70%;
-            /*    max-height: 100%;
-*/ width: 50%;
-            height: 90vh;
-            border: 0;
-        }
+                .templates {
+                    display: inline-block;
+                    position: absolute;
+                    top: 0;
+                    left: 70%;
+                    /*    max-height: 100%;
+        */ width: 50%;
+                    height: 90vh;
+                    border: 0;
+                }
 
-        .button-num {
-            /*  border: 0;
-  background: rgb(194, 105, 105);
-  text-shadow: 1px 1px 1px white;
-  border: 1px solid #999;*/
-            /*position: absolute;*/
-            cursor: pointer;
-            /*    top: 5px;
-    left: 5px;*/
-        }
+                .button-num {
+                    /*  border: 0;
+          background: rgb(194, 105, 105);
+          text-shadow: 1px 1px 1px white;
+          border: 1px solid #999;*/
+                    /*position: absolute;*/
+                    cursor: pointer;
+                    /*    top: 5px;
+            left: 5px;*/
+                }
 
-        .progress {
-            position: absolute;
-            top: 35px;
-            left: 5px;
-        }
+                .progress {
+                    position: absolute;
+                    top: 35px;
+                    left: 5px;
+                }
 
-        .preview {
-            position: absolute;
-            top: 60px;
-            width: 20%;
-            height: 90vh;
-            overflow-y: auto;
-            scrollbar-width: thin;
-            scrollbar-color: rgb(194, 105, 105) orange;
-            /*min-width : 150px;*/
-        }
+                .preview {
+                    position: absolute;
+                    top: 60px;
+                    width: 20%;
+                    height: 90vh;
+                    overflow-y: auto;
+                    scrollbar-width: thin;
+                    scrollbar-color: rgb(194, 105, 105) orange;
+                    /*min-width : 150px;*/
+                }
 
-        .thumb-bar {
-            display: inline;
-            /*width: 30%;*/
-            float: left;
-            /*cursor: pointer;*/
-            /*border: 1px solid rgb(95, 55, 55);*/
-        }
-
+                .thumb-bar {
+                    display: inline;
+                    /*width: 30%;*/
+                    float: left;
+                    /*cursor: pointer;*/
+                    /*border: 1px solid rgb(95, 55, 55);*/
+                }
     </style>
 </head>
 <body>
@@ -138,8 +139,6 @@
             <button class="button-num" id="btnGrd" type="button">grid</button>
         </div>
     </div>
-
-    <script src="enable-threads.js"></script>
 
     <script type="text/javascript">
 
