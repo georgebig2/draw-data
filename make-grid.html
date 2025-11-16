@@ -187,7 +187,7 @@
         // Worker pool: fetch worker script, create Blob URL and spawn multiple workers
         let gridWorkers = [];
         let workerReady = false;
-        const poolSize = 5;//Math.max(1, (navigator.hardwareConcurrency || 4) - 1);
+        const poolSize = 2;//Math.max(1, (navigator.hardwareConcurrency || 4) - 1);
         let totalAssignedTasks = 0;
         let completedTasks = 0;
 
@@ -213,6 +213,7 @@
                     } else if (type === 'templateResult') {
                         progress.value = data.progress;
                         progress.hidden = (progress.value >= 1);
+                        console.log('templateResult received; progress ', progress.value);
                     } else if (type === 'gridResult') {
                         // Each gridResult corresponds to one completed task
                         try {
