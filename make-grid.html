@@ -190,6 +190,9 @@
         const poolSize = 2;//Math.max(1, (navigator.hardwareConcurrency || 4) - 1);
         let totalAssignedTasks = 0;
         let completedTasks = 0;
+        progress.value = 0;
+        progress.hidden = true;
+
 
         (async function initWorkerPool() {
             let blobUrl = 'grid-worker.js';
@@ -211,9 +214,9 @@
                         workerReady = true;
                         console.log('Grid worker ready (pool member)');
                     } else if (type === 'templateResult') {
-                        progress.value = data.progress;
-                        progress.hidden = (progress.value >= 1);
-                        console.log('templateResult received; progress ', progress.value);
+
+                        completedTasks++;                        
+                        console.log('templateResult result received; completed', completedTasks, 'of', totalAssignedTasks);
                     } else if (type === 'gridResult') {
                         // Each gridResult corresponds to one completed task
                         try {
@@ -224,14 +227,14 @@
                         }
 
                         completedTasks++;
-                        if (totalAssignedTasks > 0) {
-                            progress.value = completedTasks / totalAssignedTasks;
-                            progress.hidden = (progress.value >= 1);
-                        }
-                        //console.log('generate_grid result received; completed', completedTasks, 'of', totalAssignedTasks);
+                        console.log('generate_grid result received; completed', completedTasks, 'of', totalAssignedTasks);
                     } else if (type === 'error') {
                         console.error('Worker error:', error);
                     }
+
+                    if (totalAssignedTasks > 0)
+                        progress.value = completedTasks / totalAssignedTasks;
+                    progress.hidden = (progress.value >= 1);
                 };
 
                 w.onerror = function(e) {
@@ -290,17 +293,15 @@
                 imageSrc.src = contents;
 
                 gen_grid = function (numTry, RegMinPixels, RegAreaFactor) {
-                    progress.hidden = false;
-                    progress.value = 0;
+                    console.log('gen_grid started');
                     const image = new Image();
                     image.onload = function () {
                         let imageData = loadImage(image);
                             if (imageData.width > 0) {
                                 // Distribute the batch across the worker pool to run in parallel
                                 const batch = 9/gridWorkers.length;
-                                completedTasks = 0;
-                                totalAssignedTasks = gridWorkers.length * batch;
                                 for (let i = 0; i < gridWorkers.length; i++) {
+                                    totalAssignedTasks += batch;
                                     gridWorkers[i].postMessage({type: 'generateGrid',
                                         data: {
                                             imageData: imageData,
@@ -398,11 +399,13 @@
 
             (async () => {                
                 templateImages.replaceChildren();
+                progress.value = 0;
+                progress.hidden = false;
+                completedTasks = 0;
+                totalAssignedTasks = 0;//gridWorkers.length * rows.length;
                 for (var i = 3; i < rows.length; i++) {
                     const cols = rows[i].split(' ');
                     let img = new Image();
-                    //progress.value = i / rows.length;
-                    //progress.hidden = (i == rows.length - 1);
 
                     try {
                         const bDisabled = cols[0].at(0) == '-';
@@ -434,9 +437,10 @@
                                     const param = parseInt(cols[1]);
                                     for (let j = 0; j < gridWorkers.length; j++) {
                                         const w = gridWorkers[j];
+                                        totalAssignedTasks++;
                                         w.postMessage({type: 'addTemplate', 
                                             data: { imageData: imageData, 
-                                                param: param, progress: (i+j*gridWorkers.length) / gridWorkers.length/rows.length }});
+                                                param: param}});
                                     }
                                 } catch (e) {
                                     console.log('add_template error ');
