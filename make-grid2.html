@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta charset="utf-8">
+    <meta http-equiv='cache-control' content='no-cache'>
+    <meta http-equiv='expires' content='0'>
+    <meta http-equiv='pragma' content='no-cache'>
+    <title>Сreate Grid</title>
+<style>
+    h1 {
+        font-family: helvetica, arial, sans-serif;
+        text-align: center;
+        border: 0;
+        margin: 0;
+    }
+
+    body {
+        width: 95vw;
+        /*    margin: 0 auto;
+*/ background-color: rgb(255, 212, 183);
+        padding: 0 20px 20px 20px;
+        /*border: 5px solid black;*/
+    }
+
+    .full-img img {
+        display: inline-block;
+        position: absolute;
+        top: 0;
+        left: 30%;
+        max-height: 100%;
+    }
+
+    .template-edit {
+        position: absolute;
+        top: 0;
+        left: 130%;
+        white-space: pre;
+    }
+    .template-edit2 {
+        position: absolute;
+        top: 150%;
+        left: 130%;
+        white-space: pre;
+    }
+
+    .template-images {
+        position: absolute;
+        top: 0;
+        left: 165%;
+        width: 30%;
+        height: 90vh;
+        overflow-y: auto;
+        scrollbar-width: thin;
+        scrollbar-color: rgb(194, 105, 105) orange;
+        /*min-width : 150px;*/
+    }
+
+    .template-image {
+        position: relative;
+        top: 0;
+        left: 0;
+        width: 100%;
+    }
+
+    .template-image-disabled {
+        position: relative;
+        top: 0;
+        left: 0;
+        width: 50%;
+        opacity: 0.5;
+    }
+
+    .template-image-text {
+        position: absolute;
+        top: 0;
+        left: 0;
+    }
+
+
+    .num-img {
+        float: left;
+        position: relative;
+    }
+
+    .stack {
+        position: relative;
+        top: 0;
+        left: 0;
+        max-width: 100%;
+        cursor: pointer;
+    }
+
+    .stack2 {
+        position: absolute;
+        top: 0;
+        left: 0;
+        max-width: 40%;
+        cursor: pointer;
+    }
+
+    .close {
+        position: absolute;
+        top: 0;
+        left: 0;
+        cursor: no-drop;
+    }
+
+    .templates {
+        display: inline-block;
+        position: absolute;
+        top: 0;
+        left: 70%;
+        /*    max-height: 100%;
+*/ width: 50%;
+        height: 90vh;
+        border: 0;
+    }
+
+    .button-num {
+        /*  border: 0;
+  background: rgb(194, 105, 105);
+  text-shadow: 1px 1px 1px white;
+  border: 1px solid #999;*/
+        /*position: absolute;*/
+        cursor: pointer;
+        /*    top: 5px;
+    left: 5px;*/
+    }
+
+    .progress {
+        position: absolute;
+        top: 35px;
+        left: 5px;
+    }
+
+    .preview {
+        position: absolute;
+        top: 60px;
+        width: 20%;
+        height: 90vh;
+        overflow-y: auto;
+        scrollbar-width: thin;
+        scrollbar-color: rgb(194, 105, 105) orange;
+        /*min-width : 150px;*/
+    }
+
+    .thumb-bar {
+        display: inline;
+        /*width: 30%;*/
+        float: left;
+        /*cursor: pointer;*/
+        /*border: 1px solid rgb(95, 55, 55);*/
+    }
+</style>
+</head>
+<body>
+    <link id="templates" crossorigin="anonymous" as="fetch" type="text/plain" href="https://georgebig2.github.io/draw-data/template.txt?version=1.0">
+    <progress class="progress" max="1" min="0" value="0"></progress>
+    <div class="preview">
+        <div class="thumb-bar"></div>
+        <p id="status">loading...</p>
+    </div>
+    <div class="full-img">
+        <!--<iframe class="templates" src="https://drive.google.com/embeddedfolderview?id=1ZtdmwAPS5olTNovk5Z99dBiTJLCRC4wS#grid"></iframe>-->
+        <img id="imageSrc" alt="" />
+        <!--<div class="caption"><input type="file" id="fileInput" name="file" /></div>-->
+        <input type="file" id="fileInput" accept="image/*" style="display:none" />
+        <button class="button-grid" id="fileButton" type="button">Open image</button>
+    </div>
+    <textarea class="template-edit2" id="templateEdit2" rows="1"></textarea>
+    <textarea class="template-edit" id="templateEdit" rows="40"></textarea>
+    <div id="templateImages" class="template-images"></div>
+
+    <script type="text/javascript">
+        const imageSrc = document.getElementById('imageSrc');
+        const fileButton = document.getElementById("fileButton");
+        const progress = document.querySelector("progress");
+        var fileInput = document.getElementById("fileInput");
+
+        const templates = document.getElementById('templates');
+        const templateEdit = document.getElementById('templateEdit');
+        const templateEdit2 = document.getElementById('templateEdit2');
+        const templateImages = document.getElementById('templateImages');
+        var templatesText, templatesText2 = "";
+        
+        const gridWorker = new Worker('grid-worker.js');
+        let workerReady = false;
+        
+        gridWorker.onmessage = function(event) {
+            const { type, data, error } = event.data;            
+            if (type === 'ready') {
+                workerReady = true;
+                console.log('Grid worker ready');
+            } else if (type === 'templateResult') {
+                progress.value = data.progress;
+                progress.hidden = (progress.value >= 1);
+                
+            } else if (type === 'gridResult') {
+                const imgData = new ImageData(data.imageData, data.width, data.height);
+                add_grid_image(imgData);
+                
+                progress.value = (data.batch - data.iteration) / data.batch;
+                progress.hidden = (progress.value >= 1);
+                console.log('generate_grid ' + data.iteration);
+                
+            } else if (type === 'error') {
+                console.error('Worker error:', error);
+            }
+        };
+        
+        async function getData() {
+            const response = await fetch(templates.href);
+            templatesText = await response.text();
+            templateEdit.value = templatesText;//.replace(/\n/g, '<br>\n');
+            console.log(templatesText);
+        }
+
+        templateEdit.addEventListener("change", () => {
+            var text = templateEdit.value;
+            localStorage.setItem("templates", text);
+        });
+        templateEdit2.addEventListener("change", () => {
+            var text = templateEdit2.value;
+            localStorage.setItem("templates2", text);
+        });
+
+        function checkTemplates() {
+            var savedText = localStorage.getItem("templates") || "";
+            var savedText2 = localStorage.getItem("templates2") || "";
+            templateEdit.value = savedText;
+            templatesText = savedText;
+            templatesText2 = savedText2;
+            if (savedText.length < 5)
+                getData();
+        }
+
+        window.onload = () => {
+            checkTemplates();
+        };
+
+        const emptyFile = fileInput.files;
+        fileButton.addEventListener(
+            "click",
+            (e) => {
+                fileInput.files = emptyFile;
+                fileInput.click();
+            },
+            false,
+        );
+        fileInput.addEventListener('input', (e) => {
+            checkTemplates();
+
+            var reader = new FileReader();
+            reader.onload = function (e) {
+                var contents = e.target.result;
+                imageSrc.src = contents;
+
+                gen_grid = function (numTry, RegMinPixels, RegAreaFactor) {
+                    progress.hidden = false;
+                    progress.value = 0;
+                    const image = new Image();
+                    image.onload = function () {
+                        let imageData = loadImage(image);
+                        if (imageData.width > 0) {
+                            gridWorker.postMessage({type: 'generateGrid',
+                                data: {
+                                    imageData: imageData,
+                                    numTry: numTry,
+                                    RegMinPixels: RegMinPixels,
+                                    RegAreaFactor: RegAreaFactor,
+                                    templatesText2: templatesText2,
+                                    batch: 9
+                                }
+                            });
+                        }
+                    };
+                    image.src = contents;
+                };
+
+                load_templates(gen_grid);
+            };
+            reader.readAsDataURL(e.target.files[0]);
+        }, false);
+
+        function handleImageClick({ target }) {
+            imageSrc.setAttribute('src', target.getAttribute('src'));
+        }
+        function handleCloseClick({ target }) {
+            const thumbBar = document.querySelector('.thumb-bar');
+            thumbBar.removeChild(target.parentElement);
+        }
+
+        function loadImage(imageSource) {
+            var img = null;
+            if (typeof imageSource === 'string') {
+                img = document.getElementById(imageSource);
+            } else {
+                img = imageSource;
+            }
+            var canvas = null;
+            var ctx = null;
+            if (img instanceof HTMLImageElement) {
+                canvas = document.createElement('canvas');
+                canvas.width = img.width;
+                canvas.height = img.height;
+                ctx = canvas.getContext('2d', { willReadFrequently: true });
+                ctx.drawImage(img, 0, 0, img.width, img.height);
+                //document.getElementById('status').innerHTML = img.width;
+            } else if (img instanceof HTMLCanvasElement || img instanceof OffscreenCanvas) {
+                canvas = img;
+                ctx = canvas.getContext('2d');
+            } else {
+                throw new Error('Please input the valid canvas or img id.');
+                return;
+            }
+
+            var imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            return imgData;// matFromImageData(imgData);
+        };
+
+        function add_grid_image(imagedata) {
+            var canvas = document.createElement('canvas');
+            var ctx = canvas.getContext('2d');
+            canvas.width = imagedata.width;
+            canvas.height = imagedata.height;
+            ctx.putImageData(imagedata, 0, 0);
+
+            var image = new Image();
+            image.classList.add('stack');
+            image.src = canvas.toDataURL();
+            image.addEventListener('click', handleImageClick);
+
+            const button = document.createElement("div");
+            button.classList.add('close');
+            let text = document.createTextNode('x');
+            button.appendChild(text);
+            button.addEventListener('click', handleCloseClick);
+
+            const box = document.createElement("div");
+            box.classList.add('num-img');
+            box.appendChild(image);
+            box.appendChild(button);
+
+            const thumbBar = document.querySelector('.thumb-bar');
+            thumbBar.appendChild(box);
+        }
+
+        function load_templates(on_finish) {
+            const text = templatesText;
+
+            //console.log(text);
+            const rows = text.split('\n');
+            const path = rows[0];
+            const numTry = rows[1];
+            const cols2 = rows[2].split(' ');
+            const RegMinPixels = cols2[0];
+            const RegAreaFactor = cols2[1];
+
+            (async () => {                
+                templateImages.replaceChildren();
+                for (var i = 3; i < rows.length; i++) {
+                    const cols = rows[i].split(' ');
+                    let img = new Image();
+                    //progress.value = i / rows.length;
+                    //progress.hidden = (i == rows.length - 1);
+
+                    try {
+                        const bDisabled = cols[0].at(0) == '-';
+                        img.src = path + (bDisabled ? cols[0].substr(1) : cols[0]) + '.png';
+                        img.crossOrigin = "Anonymous";
+                        await img.decode();
+
+                        var image = new Image();
+                        image.classList.add(bDisabled ? 'template-image-disabled' : 'template-image');
+                        image.src = img.src;
+
+                        const button = document.createElement("div");
+                        button.classList.add('template-image-text');
+                        let txt = document.createTextNode(cols[0]);
+                        button.appendChild(txt);
+
+                        const box = document.createElement("div");
+                        box.classList.add('num-img');
+                        box.appendChild(image);
+                        box.appendChild(button);
+
+                        templateImages.appendChild(box);
+
+                        if (!bDisabled) {
+                            let imageData = loadImage(img);
+                            if (imageData.width > 0) {
+                                console.log('add_template ' + cols[0] + ' ' + cols[1]);
+                                gridWorker.postMessage({type: 'addTemplate', 
+                                    data: { imageData: imageData, param: parseInt(cols[1]), progress: i / rows.length }});//, transfer: [imageData.data.buffer] });
+                            }
+                        }
+                    }
+                    catch (e) {
+                        console.log(e);
+                    }
+                }
+                on_finish(numTry, RegMinPixels, RegAreaFactor);
+            })();
+        }
+
+        //var Module = {
+        //    onRuntimeInitialized() {
+                document.getElementById('status').innerHTML = '';
+        //    }
+        //};
+    </script>
+
+</body>
+</html>
