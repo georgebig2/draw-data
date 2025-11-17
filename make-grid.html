@@ -302,6 +302,8 @@
                                 const batch = 9/gridWorkers.length;
                                 for (let i = 0; i < gridWorkers.length; i++) {
                                     totalAssignedTasks += batch;
+                                    progress.value = completedTasks / totalAssignedTasks;
+                                    progress.hidden = (progress.value >= 1);
                                     gridWorkers[i].postMessage({type: 'generateGrid',
                                         data: {
                                             imageData: imageData,
