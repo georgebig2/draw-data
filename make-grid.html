@@ -410,7 +410,11 @@
                     let img = new Image();
 
                     try {
+                        const bSkiped = cols[0].charAt(0) === '—';
+                        if (bSkiped)
+                            continue;
                         const bDisabled = cols[0].at(0) == '-';
+                        // Treat an em dash (—, U+2014) as the skip marker
                         img.src = path + (bDisabled ? cols[0].substr(1) : cols[0]) + '.png';
                         img.crossOrigin = "Anonymous";
                         await img.decode();
