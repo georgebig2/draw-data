@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta charset="utf-8">
+    <meta http-equiv='cache-control' content='no-cache'>
+    <meta http-equiv='expires' content='0'>
+    <meta http-equiv='pragma' content='no-cache'>
+    <title>Сreate Palette</title>
+<style>
+    h1 {
+        font-family: helvetica, arial, sans-serif;
+        text-align: center;
+        border: 0;
+        margin: 0;
+    }
+
+    body {
+        width: 95vw;
+        /*    margin: 0 auto;
+*/ background-color: rgb(255, 212, 183);
+        padding: 0 20px 20px 20px;
+        /*border: 5px solid black;*/
+    }
+
+    .full-img img {
+        display: inline-block;
+        position: absolute;
+        top: 0;
+        left: 30%;
+        max-height: 100%;
+    }
+
+    .num-img {
+        float: left;
+        position: relative;
+    }
+
+    .stack {
+        position: relative;
+        top: 0;
+        left: 0;
+        max-width: 100%;
+        cursor: pointer;
+    }
+
+    .stack2 {
+        position: absolute;
+        top: 0;
+        left: 0;
+        max-width: 40%;
+        cursor: pointer;
+    }
+
+    .close {
+        position: absolute;
+        top: 0;
+        left: 0;
+        cursor: no-drop;
+    }
+
+    .button-num {
+        /*  border: 0;
+  background: rgb(194, 105, 105);
+  text-shadow: 1px 1px 1px white;
+  border: 1px solid #999;*/
+        /*position: absolute;*/
+        cursor: pointer;
+        /*    top: 5px;
+    left: 5px;*/
+    }
+
+    .progress {
+        position: absolute;
+        top: 35px;
+        left: 5px;
+    }
+
+    .preview {
+        position: absolute;
+        top: 4%;
+        width: 25%;
+        height: 90vh;
+        overflow-y: auto;
+        scrollbar-width: thin;
+        scrollbar-color: rgb(194, 105, 105) orange;
+        /*min-width : 150px;*/
+    }
+
+    .thumb-bar {
+        display: inline;
+        /*width: 30%;*/
+        float: left;
+        /*cursor: pointer;*/
+        /*border: 1px solid rgb(95, 55, 55);*/
+    }
+</style>
+</head>
+<body>
+    <progress max="1" min="0" value="0"></progress>
+    <div class="preview">
+        <input type="file" id="fileInput" accept="image/*" style="display:none" />
+        <label for="randomSlider">Random:</label>
+        <input type="range" id="randomSlider" min="0" max="10" value="3" />
+        <span id="randomSliderValue">3</span>
+        <br />
+        <!-- <label for="paletteSlider">Poster:</label> -->
+        <input type="range" id="paletteSlider" min="1" max="16" value="6" />
+        <span id="paletteSliderValue">6</span>
+        <br />
+        <button class="button-grid" id="fileButton" type="button">Open image</button>
+        <div class="thumb-bar"></div>
+        <p id="status">loading...</p>
+    </div>
+    <div class="full-img">
+        <img id="imageSrc" alt="" />
+    </div>
+
+    <script type="text/javascript">
+        const imageSrc = document.getElementById('imageSrc');
+        let /*prevImageSrc = null,*/ mainImageSrc = null;
+        /*imageSrc.addEventListener('click', function() {
+            if (prevImageSrc) {
+                const prevImageSrc2 = imageSrc.getAttribute('src');
+                imageSrc.setAttribute('src', prevImageSrc);
+                prevImageSrc = prevImageSrc2;
+            }
+        });*/
+
+        const fileButton = document.getElementById("fileButton");
+        const progress = document.querySelector("progress");
+        var fileInput = document.getElementById("fileInput");
+
+        const paletteSlider = document.getElementById('paletteSlider');
+        const paletteSliderValue = document.getElementById('paletteSliderValue');
+        const randomSlider = document.getElementById('randomSlider');
+        const randomSliderValue = document.getElementById('randomSliderValue');
+        if (paletteSlider && paletteSliderValue) {
+            paletteSlider.addEventListener('input', () => {
+                paletteSliderValue.textContent = paletteSlider.value;
+            });
+        }
+        if (randomSlider && randomSliderValue) {
+            randomSlider.addEventListener('input', () => {
+                randomSliderValue.textContent = randomSlider.value;
+            });
+        }
+        paletteSlider.hidden = true;
+        paletteSliderValue.hidden = true;
+        
+        // Worker pool: fetch worker script, create Blob URL and spawn multiple workers
+        let gridWorkers = [];
+        let workerReady = false;
+        const poolSize = 1;//Math.max(1, (navigator.hardwareConcurrency || 4) - 1);
+        let totalAssignedTasks = 0;
+        let completedTasks = 0;
+        progress.value = 0;
+        progress.hidden = true;
+
+        (async function initWorkerPool() {
+            let blobUrl = 'palette-worker.js';
+            for (let i = 0; i < poolSize; i++) {
+                const w = new Worker(blobUrl);
+
+                w.onmessage = function(event) {
+                    const { type, data, error } = event.data;
+                    if (type === 'ready') {
+                        workerReady = true;
+                        console.log('Grid worker ready (pool member)');
+                    } else if (type === 'templateResult') {
+                        completedTasks++;                        
+                        console.log('templateResult result received; completed', completedTasks, 'of', totalAssignedTasks);
+                    } else if (type === 'paletteResult') {
+                        // Each paletteResult corresponds to one completed task
+                        try {
+                            //const imgData = new ImageData(data.imageData, data.width, data.height);
+                            add_grid_image(data.imageData);
+                        } catch (e) {
+                            console.error('Failed to construct ImageData from worker result', e);
+                        }
+                        completedTasks++;
+                        console.log('generate_grid result received; completed', completedTasks, 'of', totalAssignedTasks);
+                    } else if (type === 'error') {
+                        console.error('Worker error:', error);
+                    }
+
+                    if (totalAssignedTasks > 0)
+                        progress.value = completedTasks / totalAssignedTasks;
+                    progress.hidden = (progress.value >= 1);
+                };
+
+                w.onerror = function(e) {
+                    console.error('Worker pool member error:', e);
+                };
+
+                gridWorkers.push(w);
+
+                let loadPalette = (file) => {
+                    fetch(file)
+                    .then(response => response.text())
+                    .then(csvText => {
+                        w.postMessage({ type: 'loadPalette', data: csvText });
+                    })
+                    .catch(error => {
+                        console.error('Error loading palette CSV:', error);
+                    });
+                };
+                loadPalette('languo.csv');
+                loadPalette('guangna.csv');
+            }
+        })();
+    
+        window.onload = () => {            
+        };
+
+        const emptyFile = fileInput.files;
+        fileButton.addEventListener(
+            "click",
+            (e) => {
+                fileInput.files = emptyFile;
+                fileInput.click();
+            },
+            false,
+        );
+        fileInput.addEventListener('input', (e) => {
+
+            var reader = new FileReader();
+            reader.onload = function (e) {
+                var contents = e.target.result;
+                imageSrc.src = contents;
+
+                gen_grid = function (numTry, RegMinPixels, RegAreaFactor) {
+                    console.log('worker started');
+                    const image = new Image();
+                    image.onload = function () {
+                        let imageData = loadImage(image);
+                            if (imageData.width > 0) {
+                                // Distribute the batch across the worker pool to run in parallel
+                                const batch = 9/gridWorkers.length;
+                                const paletteSize = (typeof paletteSlider !== 'undefined' && paletteSlider && paletteSlider.value) ? parseInt(paletteSlider.value, 10) : 100;
+                                const rndFactor = (typeof randomSlider !== 'undefined' && randomSlider && randomSlider.value) ? parseInt(randomSlider.value, 10) : 600;
+                                for (let i = 0; i < gridWorkers.length; i++) {
+                                    totalAssignedTasks += batch;
+                                    progress.value = completedTasks / totalAssignedTasks;
+                                    progress.hidden = (progress.value >= 1);
+                                    gridWorkers[i].postMessage({type: 'generatePalette',
+                                        data: {
+                                            imageData: imageData,
+                                            batch: batch,
+                                            paletteSize: paletteSize,
+                                            rndFactor: rndFactor
+                                        }
+                                    });
+                                }
+                            }
+                    };
+                    image.src = contents;
+                };
+
+                gen_grid(100, 100, 0.5);
+            };
+            reader.readAsDataURL(e.target.files[0]);
+        }, false);
+
+        function handleImageClick({ target }) {
+            imageSrc.setAttribute('src', 
+                imageSrc.getAttribute('src') != target.getAttribute('src') ? target.getAttribute('src') : mainImageSrc);
+        }
+        function handleCloseClick({ target }) {
+            const thumbBar = document.querySelector('.thumb-bar');
+            thumbBar.removeChild(target.parentElement);
+        }
+
+        function loadImage(imageSource) {
+            var img = null;
+            mainImageSrc = imageSource.src || imageSource;
+            if (typeof imageSource === 'string') {
+                img = document.getElementById(imageSource);
+            } else {
+                img = imageSource;
+            }
+            var canvas = null;
+            var ctx = null;
+            if (img instanceof HTMLImageElement) {
+                canvas = document.createElement('canvas');
+                canvas.width = img.width;
+                canvas.height = img.height;
+                ctx = canvas.getContext('2d', { willReadFrequently: true });
+                ctx.drawImage(img, 0, 0, img.width, img.height);
+                //document.getElementById('status').innerHTML = img.width;
+            } else if (img instanceof HTMLCanvasElement || img instanceof OffscreenCanvas) {
+                canvas = img;
+                ctx = canvas.getContext('2d');
+            } else {
+                throw new Error('Please input the valid canvas or img id.');
+                return;
+            }
+            var imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            return imgData;// matFromImageData(imgData);
+        };
+
+        function add_grid_image(imagedata) {
+            var canvas = document.createElement('canvas');
+            var ctx = canvas.getContext('2d');
+            canvas.width = imagedata.width;
+            canvas.height = imagedata.height;
+            ctx.putImageData(imagedata, 0, 0);
+
+            var image = new Image();
+            image.classList.add('stack');
+            image.src = canvas.toDataURL();
+            image.addEventListener('click', handleImageClick);
+
+            const button = document.createElement("div");
+            button.classList.add('close');
+            let text = document.createTextNode('x');
+            button.appendChild(text);
+            button.addEventListener('click', handleCloseClick);
+
+            const box = document.createElement("div");
+            box.classList.add('num-img');
+            box.appendChild(image);
+            box.appendChild(button);
+
+            const thumbBar = document.querySelector('.thumb-bar');
+            thumbBar.appendChild(box);
+        }        
+        //var Module = {
+        //    onRuntimeInitialized() {
+                document.getElementById('status').innerHTML = '';
+        //    }
+        //};
+    </script>
+
+</body>
+</html>
