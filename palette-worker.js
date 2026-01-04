@@ -100,7 +100,6 @@ function posterize(levels) {
     }
     return paletteLab
 }
-
 function posterizeInLab(levelsL, levelsA, levelsB) {
     var paletteLab = [];
     for (let l = 0; l < levelsL; l++) {
@@ -133,7 +132,7 @@ function makePaletteLab(palette, guangNa, lanGuo) {
         const pb = (palette[p][0]) & 0xff;
         const prLab = rgb2lab([pr, pg, pb]);
         //const prLab = rgbToHsl(pr, pg, pb);
-        paletteLab.push([prLab, palette[p][0]]);
+        paletteLab.push([prLab, palette[p][0], (palette[p][1])]);
     }
     return paletteLab;
 }
@@ -304,21 +303,12 @@ function findRects(imgDataOrig, palYOffset) {
     return outRects;
 }
 
-function getClosestColorLabel(palette, r, g, b) {
-    var paletteLab = [];
-    for (let p = 0; p < palette.length; p++) {
-        const pr = (palette[p][0] >> 16) & 0xff;
-        const pg = (palette[p][0] >> 8) & 0xff;
-        const pb = (palette[p][0]) & 0xff;
-        const prLab = rgb2lab([pr, pg, pb]);
-        paletteLab[p] = prLab;
-    }
-
+function getClosestColorLabel(paletteLab, r, g, b) {
     const rLab = rgb2lab([r, g, b]);
     let minDistance = Number.MAX_VALUE;
     let closestIdx = -1;
-    for (let p = 0; p < palette.length; p++) {
-        const prLab = paletteLab[p];
+    for (let p = 0; p < paletteLab.length; p++) {
+        const prLab = paletteLab[p][0];
         const distance = //(random.next() * 10 - 5) +
             (rLab[0] - prLab[0]) * (rLab[0] - prLab[0]) +
             (rLab[1] - prLab[1]) * (rLab[1] - prLab[1]) +
@@ -329,7 +319,7 @@ function getClosestColorLabel(palette, r, g, b) {
         }
     }
     //pixels.get(h).newHex = closestColor;
-    return [palette[closestIdx][1], palette[closestIdx][0]];
+    return [paletteLab[closestIdx][2], paletteLab[closestIdx][1]];
 }
 
 function findRectColors(rect, imgData) {
@@ -369,19 +359,12 @@ function addMarkersLabels(rect, idx, imgData, ctx, palette) {
     const G = (label[1] >> 8) & 0xff;
     const B = label[1] & 0xff;
 
-    //ctx.antialias = 0 ? 'none' : 'default';
     ctx.fillStyle = `rgb(${R},${G},${B})`;
-    ctx.fillRect(rect.x - 0, rect.y + rect.height * 3 / 4, rect.width + 0, rect.height / 5);
-    //ctx.strokeRect(rect.x, rect.y, rect.width, rect.height);
+    ctx.fillRect(rect.x + 2, rect.y + rect.height * 3 / 4, rect.width - 2, rect.height / 5);
 
-    ctx.fillStyle = (R + G + B) < 300 ? "white" : "black"; //'rgba(51, 51, 51, 1)';
-    //const fSize = 50 / 1.5;//Math.min(300, palH * 0.5);
+    ctx.fillStyle = (R + G + B) < 300 ? "white" : "black";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    //ctx.fillText(i + "", palX + palW/2, palY + palH/2);
-    //ctx.font = 100 + "px bold 'Courier New'";
-    //ctx.fillText((idx < cPaletteChars.length ? cPaletteChars[idx] : "?") + "", rect.x + rect.width / 2, rect.y + rect.height / 3);
-    //ctx.font = "50px bold 'Courier New'";
     ctx.font = "bold 32px 'Courier New'";
     ctx.fillText(Math.abs(label[0]) + (label[0] > 0 ? "G" : "L"), rect.x + rect.width / 2, rect.y + rect.height * 4 / 5);
     return h;
@@ -404,11 +387,16 @@ self.onmessage = async function (event) {
     if (type === 'init') {
         self.postMessage({ type: 'ready' });
     } else if (type === 'loadPalette') {
-        const palette = loadPaletteCSV(data);
+        let palette = loadPaletteCSV(data);
+        if (!allPalettes || allPalettes.length === 0) {
+            for(let i = 0; i < palette.length; i++) {
+                palette[i][1] *= -1;
+            }
+        }
         allPalettes = allPalettes.concat(palette);
         //self.postMessage({ type: 'paletteLoaded', data: palette });
     } else if (type === 'generatePalette') {
-        const { imageData, batch, paletteSize = 6, rndFactor = 3 } = data;
+        const { imageData, batch, paletteSize = 6, rndFactor = 3, enableG = true, enableL = true } = data;
 
         try {
             const random = new Random(Date.now() & 0x0fffffff);
@@ -418,12 +406,10 @@ self.onmessage = async function (event) {
             //const levels = 6;//Math.floor(random.next() * 4) + 4;//paletteSize;//Math.max(2, Math.round(Math.cbrt(paletteSize)));
             //const paletteLab2 = random.next() < 0.5 ?
             //    posterize(levels) : posterizeInLab(levels, levels, levels);
-
-            const paletteLab = makePaletteLab(allPalettes, true, true);
+            const paletteLab = makePaletteLab(allPalettes, enableG, enableL);
 
             const canvas = new OffscreenCanvas(imageData.width, imageData.height);
             const ctx = canvas.getContext('2d');
-            //ctx.antialias = 0 ? 'none' : 'default';
 
             for (let i = 0; i < batch; i++) {
 
@@ -433,7 +419,7 @@ self.onmessage = async function (event) {
                 if (1) {
                     ctx.putImageData(imageData2, 0, 0);
                     for (let i = 0; i < rects.length; ++i) {
-                        addMarkersLabels(rects[i], i, imageData2, ctx, allPalettes);
+                        addMarkersLabels(rects[i], i, imageData2, ctx, paletteLab);
                     }
                     imageData2 = ctx.getImageData(0, 0, imageData2.width, imageData2.height);
                 }

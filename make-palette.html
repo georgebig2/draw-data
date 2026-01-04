@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta charset="utf-8">
@@ -7,108 +8,128 @@
     <meta http-equiv='expires' content='0'>
     <meta http-equiv='pragma' content='no-cache'>
     <title>Сreate Palette</title>
-<style>
-    h1 {
-        font-family: helvetica, arial, sans-serif;
-        text-align: center;
-        border: 0;
-        margin: 0;
-    }
+    <style>
+        h1 {
+            font-family: helvetica, arial, sans-serif;
+            text-align: center;
+            border: 0;
+            margin: 0;
+        }
 
-    body {
-        width: 95vw;
-        /*    margin: 0 auto;
-*/ background-color: rgb(255, 212, 183);
-        padding: 0 20px 20px 20px;
-        /*border: 5px solid black;*/
-    }
+        body {
+            width: 95vw;
+            /*    margin: 0 auto;
+*/
+            background-color: rgb(255, 212, 183);
+            padding: 0 20px 20px 20px;
+            /*border: 5px solid black;*/
+        }
 
-    .full-img img {
-        display: inline-block;
-        position: absolute;
-        top: 0;
-        left: 30%;
-        max-height: 100%;
-    }
+        .full-img img {
+            display: inline-block;
+            position: absolute;
+            top: 0;
+            left: 30%;
+            max-height: 100%;
+        }
 
-    .num-img {
-        float: left;
-        position: relative;
-    }
+        .num-img {
+            float: left;
+            position: relative;
+        }
 
-    .stack {
-        position: relative;
-        top: 0;
-        left: 0;
-        max-width: 100%;
-        cursor: pointer;
-    }
+        .stack {
+            position: relative;
+            top: 0;
+            left: 0;
+            max-width: 100%;
+            cursor: pointer;
+        }
 
-    .stack2 {
-        position: absolute;
-        top: 0;
-        left: 0;
-        max-width: 40%;
-        cursor: pointer;
-    }
+        .stack2 {
+            position: absolute;
+            top: 0;
+            left: 0;
+            max-width: 40%;
+            cursor: pointer;
+        }
 
-    .close {
-        position: absolute;
-        top: 0;
-        left: 0;
-        cursor: no-drop;
-    }
+        .close {
+            position: absolute;
+            top: 0;
+            left: 0;
+            cursor: no-drop;
+        }
 
-    .button-num {
-        /*  border: 0;
+        .button-num {
+            /*  border: 0;
   background: rgb(194, 105, 105);
   text-shadow: 1px 1px 1px white;
   border: 1px solid #999;*/
-        /*position: absolute;*/
-        cursor: pointer;
-        /*    top: 5px;
+            /*position: absolute;*/
+            cursor: pointer;
+            /*    top: 5px;
     left: 5px;*/
-    }
+        }
 
-    .progress {
-        position: absolute;
-        top: 35px;
-        left: 5px;
-    }
+        .progress {
+            position: absolute;
+            top: 35px;
+            left: 5px;
+        }
 
-    .preview {
-        position: absolute;
-        top: 4%;
-        width: 25%;
-        height: 90vh;
-        overflow-y: auto;
-        scrollbar-width: thin;
-        scrollbar-color: rgb(194, 105, 105) orange;
-        /*min-width : 150px;*/
-    }
+        .preview {
+            position: absolute;
+            top: 4%;
+            width: 25%;
+            height: 90vh;
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: rgb(194, 105, 105) orange;
+            /*min-width : 150px;*/
+        }
 
-    .thumb-bar {
-        display: inline;
-        /*width: 30%;*/
-        float: left;
-        /*cursor: pointer;*/
-        /*border: 1px solid rgb(95, 55, 55);*/
-    }
-</style>
+        .thumb-bar {
+            display: inline;
+            /*width: 30%;*/
+            float: left;
+            /*cursor: pointer;*/
+            /*border: 1px solid rgb(95, 55, 55);*/
+        }
+        .control-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+        }
+        .checkbox-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin: 6px 0 10px 0;
+        }
+    </style>
 </head>
+
 <body>
     <progress max="1" min="0" value="0"></progress>
     <div class="preview">
-        <input type="file" id="fileInput" accept="image/*" style="display:none" />
-        <label for="randomSlider">Random:</label>
-        <input type="range" id="randomSlider" min="0" max="10" value="3" />
-        <span id="randomSliderValue">3</span>
-        <br />
+        <div class="control-row">
+            <label for="randomSlider">variance</label>
+            <input type="range" id="randomSlider" min="0" max="10" value="3" />
+            <span id="randomSliderValue">3</span>
+        </div>
+        <div class="checkbox-row">
+            <label for="enableG">guangna</label>
+            <input type="checkbox" id="enableG" checked />
+            <label for="enableL">languo</label>
+            <input type="checkbox" id="enableL" checked />
+        </div>
         <!-- <label for="paletteSlider">Poster:</label> -->
         <input type="range" id="paletteSlider" min="1" max="16" value="6" />
         <span id="paletteSliderValue">6</span>
-        <br />
-        <button class="button-grid" id="fileButton" type="button">Open image</button>
+        <button id="fileButton" type="button">Open image</button>
+        <input type="file" id="fileInput" accept="image/*" style="display:none" />
         <div class="thumb-bar"></div>
         <p id="status">loading...</p>
     </div>
@@ -118,14 +139,7 @@
 
     <script type="text/javascript">
         const imageSrc = document.getElementById('imageSrc');
-        let /*prevImageSrc = null,*/ mainImageSrc = null;
-        /*imageSrc.addEventListener('click', function() {
-            if (prevImageSrc) {
-                const prevImageSrc2 = imageSrc.getAttribute('src');
-                imageSrc.setAttribute('src', prevImageSrc);
-                prevImageSrc = prevImageSrc2;
-            }
-        });*/
+        let mainImageSrc = null;      
 
         const fileButton = document.getElementById("fileButton");
         const progress = document.querySelector("progress");
@@ -135,6 +149,8 @@
         const paletteSliderValue = document.getElementById('paletteSliderValue');
         const randomSlider = document.getElementById('randomSlider');
         const randomSliderValue = document.getElementById('randomSliderValue');
+        const enableG = document.getElementById('enableG');
+        const enableL = document.getElementById('enableL');
         if (paletteSlider && paletteSliderValue) {
             paletteSlider.addEventListener('input', () => {
                 paletteSliderValue.textContent = paletteSlider.value;
@@ -147,7 +163,7 @@
         }
         paletteSlider.hidden = true;
         paletteSliderValue.hidden = true;
-        
+
         // Worker pool: fetch worker script, create Blob URL and spawn multiple workers
         let gridWorkers = [];
         let workerReady = false;
@@ -162,14 +178,14 @@
             for (let i = 0; i < poolSize; i++) {
                 const w = new Worker(blobUrl);
 
-                w.onmessage = function(event) {
+                w.onmessage = function (event) {
                     const { type, data, error } = event.data;
                     if (type === 'ready') {
                         workerReady = true;
                         console.log('Grid worker ready (pool member)');
-                    } else if (type === 'templateResult') {
-                        completedTasks++;                        
-                        console.log('templateResult result received; completed', completedTasks, 'of', totalAssignedTasks);
+                        //} else if (type === 'templateResult') {
+                        //     completedTasks++;                        
+                        //     console.log('templateResult result received; completed', completedTasks, 'of', totalAssignedTasks);
                     } else if (type === 'paletteResult') {
                         // Each paletteResult corresponds to one completed task
                         try {
@@ -180,16 +196,17 @@
                         }
                         completedTasks++;
                         console.log('generate_grid result received; completed', completedTasks, 'of', totalAssignedTasks);
+
+                        if (totalAssignedTasks > 0)
+                            progress.value = completedTasks / totalAssignedTasks;
+                        progress.hidden = (progress.value >= 1);
+
                     } else if (type === 'error') {
                         console.error('Worker error:', error);
                     }
-
-                    if (totalAssignedTasks > 0)
-                        progress.value = completedTasks / totalAssignedTasks;
-                    progress.hidden = (progress.value >= 1);
                 };
 
-                w.onerror = function(e) {
+                w.onerror = function (e) {
                     console.error('Worker pool member error:', e);
                 };
 
@@ -197,20 +214,20 @@
 
                 let loadPalette = (file) => {
                     fetch(file)
-                    .then(response => response.text())
-                    .then(csvText => {
-                        w.postMessage({ type: 'loadPalette', data: csvText });
-                    })
-                    .catch(error => {
-                        console.error('Error loading palette CSV:', error);
-                    });
+                        .then(response => response.text())
+                        .then(csvText => {
+                            w.postMessage({ type: 'loadPalette', data: csvText });
+                        })
+                        .catch(error => {
+                            console.error('Error loading palette CSV:', error);
+                        });
                 };
                 loadPalette('languo.csv');
                 loadPalette('guangna.csv');
             }
         })();
-    
-        window.onload = () => {            
+
+        window.onload = () => {
         };
 
         const emptyFile = fileInput.files;
@@ -234,25 +251,28 @@
                     const image = new Image();
                     image.onload = function () {
                         let imageData = loadImage(image);
-                            if (imageData.width > 0) {
-                                // Distribute the batch across the worker pool to run in parallel
-                                const batch = 9/gridWorkers.length;
-                                const paletteSize = (typeof paletteSlider !== 'undefined' && paletteSlider && paletteSlider.value) ? parseInt(paletteSlider.value, 10) : 100;
-                                const rndFactor = (typeof randomSlider !== 'undefined' && randomSlider && randomSlider.value) ? parseInt(randomSlider.value, 10) : 600;
-                                for (let i = 0; i < gridWorkers.length; i++) {
-                                    totalAssignedTasks += batch;
-                                    progress.value = completedTasks / totalAssignedTasks;
-                                    progress.hidden = (progress.value >= 1);
-                                    gridWorkers[i].postMessage({type: 'generatePalette',
-                                        data: {
-                                            imageData: imageData,
-                                            batch: batch,
-                                            paletteSize: paletteSize,
-                                            rndFactor: rndFactor
-                                        }
-                                    });
-                                }
+                        if (imageData.width > 0) {
+                            // Distribute the batch across the worker pool to run in parallel
+                            const batch = 9 / gridWorkers.length;
+                            const paletteSize = (typeof paletteSlider !== 'undefined' && paletteSlider && paletteSlider.value) ? parseInt(paletteSlider.value, 10) : 100;
+                            const rndFactor = (typeof randomSlider !== 'undefined' && randomSlider && randomSlider.value) ? parseInt(randomSlider.value, 10) : 600;
+                            for (let i = 0; i < gridWorkers.length; i++) {
+                                totalAssignedTasks += batch;
+                                progress.value = completedTasks / totalAssignedTasks;
+                                progress.hidden = (progress.value >= 1);
+                                gridWorkers[i].postMessage({
+                                    type: 'generatePalette',
+                                    data: {
+                                        imageData: imageData,
+                                        batch: batch,
+                                        paletteSize: paletteSize,
+                                        rndFactor: rndFactor,
+                                        enableG: enableG.checked,
+                                        enableL: enableL.checked
+                                    }
+                                });
                             }
+                        }
                     };
                     image.src = contents;
                 };
@@ -263,7 +283,7 @@
         }, false);
 
         function handleImageClick({ target }) {
-            imageSrc.setAttribute('src', 
+            imageSrc.setAttribute('src',
                 imageSrc.getAttribute('src') != target.getAttribute('src') ? target.getAttribute('src') : mainImageSrc);
         }
         function handleCloseClick({ target }) {
@@ -324,13 +344,14 @@
 
             const thumbBar = document.querySelector('.thumb-bar');
             thumbBar.appendChild(box);
-        }        
+        }
         //var Module = {
         //    onRuntimeInitialized() {
-                document.getElementById('status').innerHTML = '';
+        document.getElementById('status').innerHTML = '';
         //    }
         //};
     </script>
 
 </body>
+
 </html>
