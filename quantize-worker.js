@@ -153,57 +153,66 @@ class KMeans {
     }
 
     initCentroids() {
-        this.centroids = [];
-        const firstIdx = Math.floor(this.random.next() * this.points.length);
-        this.centroids.push(this.points[firstIdx]);
-        while (this.centroids.length < this.k) {
-            // Compute squared distances to nearest centroid
-            const distances = this.points.map(p => {
-                let minDist = Infinity;
-                for (const c of this.centroids) {
-                    const dist = p.distance2(c);
-                    //minDist += dist;
-                    if (dist < minDist) minDist = dist;
-                }
-                return minDist;// * p.weight;// * minDist;
-            });
+        if (this.random.next() < 0.5) {
+            this.centroids = [];
+            const firstIdx = Math.floor(this.random.next() * this.points.length);
+            this.centroids.push(this.points[firstIdx]);
+            while (this.centroids.length < this.k) {
+                // Compute squared distances to nearest centroid
+                const distances = this.points.map(p => {
+                    let minDist = Infinity;
+                    for (const c of this.centroids) {
+                        const dist = p.distance2(c);
+                        //minDist += dist;
+                        if (dist < minDist) minDist = dist;
+                    }
+                    return minDist;// * p.weight;// * minDist;
+                });
 
-            // Weighted random selection with best compactness
-            const sum = distances.reduce((a, b) => a + b, 0);
-            let midx = 0, minSum = Infinity;
-            for (let t = 0; t < 1; t++) {
-                let idx = 0;
-                let r = this.random.next() * sum;
-                for (; idx < distances.length; idx++) {
-                    r -= distances[idx];
-                    if (r <= 0) break;
+                // Weighted random selection with best compactness
+                const sum = distances.reduce((a, b) => a + b, 0);
+                let midx = 0, minSum = Infinity;
+                for (let t = 0; t < 1; t++) {
+                    let idx = 0;
+                    let r = this.random.next() * sum;
+                    for (; idx < distances.length; idx++) {
+                        r -= distances[idx];
+                        if (r <= 0) break;
+                    }
+                    let distSum = 0;
+                    for (let p = 0; p < this.points.length; p++) {
+                        distSum += this.points[p].distance2(this.points[idx]);
+                    }
+                    if (distSum < minSum) {
+                        minSum = distSum;
+                        midx = idx;
+                    }
                 }
-                let distSum = 0;
-                for (let p = 0; p < this.points.length; p++) {
-                    distSum += this.points[p].distance2(this.points[idx]);
-                }
-                if (distSum < minSum) {
-                    minSum = distSum;
-                    midx = idx;
-                }
-            }
 
-            // Avoid duplicates
-            let candidate = this.points[midx];
-            if (!this.centroids.includes(candidate)) {
-                this.centroids.push(candidate);
-            } else {
-                // fallback: pick next not-in-centroids
-                for (let j = 0; j < this.points.length; j++) {
-                    if (!this.centroids.includes(this.points[j])) {
-                        this.centroids.push(this.points[j]);
-                        break;
+                // Avoid duplicates
+                let candidate = this.points[midx];
+                if (!this.centroids.includes(candidate)) {
+                    this.centroids.push(candidate);
+                } else {
+                    // fallback: pick next not-in-centroids
+                    for (let j = 0; j < this.points.length; j++) {
+                        if (!this.centroids.includes(this.points[j])) {
+                            this.centroids.push(this.points[j]);
+                            break;
+                        }
                     }
                 }
             }
+            for (let i = 0; i < this.k; i++) {
+                this.pointsPerCategory.push([])
+            }
         }
-        for (let i = 0; i < this.k; i++) {
-            this.pointsPerCategory.push([])
+        else {
+            this.shuffle(this.points);
+            for (let i = 0; i < this.k; i++) {
+                this.centroids.push(this.points[i]);
+                this.pointsPerCategory.push([])
+            }
         }
     }
     step() {
