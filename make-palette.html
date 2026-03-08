@@ -116,7 +116,7 @@
     <div class="preview">
         <div class="control-row">
             <label for="randomSlider">variance</label>
-            <input type="range" id="randomSlider" min="0" max="99" value="3" />
+            <input type="range" id="randomSlider" min="0" max="300" value="3" />
             <span id="randomSliderValue">3</span>
         </div>
         <div class="checkbox-row">
@@ -129,6 +129,7 @@
         <input type="range" id="paletteSlider" min="1" max="16" value="6" />
         <span id="paletteSliderValue">6</span>
         <button id="fileButton" type="button">Open image</button>
+        <button id="repeatButton" type="button">Repeat</button>
         <input type="file" id="fileInput" accept="image/*" style="display:none" />
         <div class="thumb-bar"></div>
         <p id="status">loading...</p>
@@ -239,48 +240,68 @@
             },
             false,
         );
+
+        let currentImageSrc = null;
+
+        function generatePalette(clearThumbnails = false) {
+            if (!currentImageSrc) return;
+
+            if (clearThumbnails) {
+                // Clear existing thumbnails
+                const thumbBar = document.querySelector('.thumb-bar');
+                while (thumbBar.firstChild) {
+                    thumbBar.removeChild(thumbBar.firstChild);
+                }
+            }
+
+            gen_grid = function (numTry, RegMinPixels, RegAreaFactor) {
+                console.log('worker started');
+                const image = new Image();
+                image.onload = function () {
+                    let imageData = loadImage(image);
+                    if (imageData.width > 0) {
+                        // Distribute the batch across the worker pool to run in parallel
+                        const batch = 9 / gridWorkers.length;
+                        const paletteSize = (typeof paletteSlider !== 'undefined' && paletteSlider && paletteSlider.value) ? parseInt(paletteSlider.value, 10) : 100;
+                        const rndFactor = (typeof randomSlider !== 'undefined' && randomSlider && randomSlider.value) ? parseInt(randomSlider.value, 10) : 600;
+                        for (let i = 0; i < gridWorkers.length; i++) {
+                            totalAssignedTasks += batch;
+                            progress.value = completedTasks / totalAssignedTasks;
+                            progress.hidden = (progress.value >= 1);
+                            gridWorkers[i].postMessage({
+                                type: 'generatePalette',
+                                data: {
+                                    imageData: imageData,
+                                    batch: batch,
+                                    paletteSize: paletteSize,
+                                    rndFactor: rndFactor,
+                                    enableG: enableG.checked,
+                                    enableL: enableL.checked
+                                }
+                            });
+                        }
+                    }
+                };
+                image.src = currentImageSrc;
+            };
+
+            gen_grid(100, 100, 0.5);
+        }
+
         fileInput.addEventListener('input', (e) => {
 
             var reader = new FileReader();
             reader.onload = function (e) {
                 var contents = e.target.result;
+                currentImageSrc = contents;
                 imageSrc.src = contents;
-
-                gen_grid = function (numTry, RegMinPixels, RegAreaFactor) {
-                    console.log('worker started');
-                    const image = new Image();
-                    image.onload = function () {
-                        let imageData = loadImage(image);
-                        if (imageData.width > 0) {
-                            // Distribute the batch across the worker pool to run in parallel
-                            const batch = 9 / gridWorkers.length;
-                            const paletteSize = (typeof paletteSlider !== 'undefined' && paletteSlider && paletteSlider.value) ? parseInt(paletteSlider.value, 10) : 100;
-                            const rndFactor = (typeof randomSlider !== 'undefined' && randomSlider && randomSlider.value) ? parseInt(randomSlider.value, 10) : 600;
-                            for (let i = 0; i < gridWorkers.length; i++) {
-                                totalAssignedTasks += batch;
-                                progress.value = completedTasks / totalAssignedTasks;
-                                progress.hidden = (progress.value >= 1);
-                                gridWorkers[i].postMessage({
-                                    type: 'generatePalette',
-                                    data: {
-                                        imageData: imageData,
-                                        batch: batch,
-                                        paletteSize: paletteSize,
-                                        rndFactor: rndFactor,
-                                        enableG: enableG.checked,
-                                        enableL: enableL.checked
-                                    }
-                                });
-                            }
-                        }
-                    };
-                    image.src = contents;
-                };
-
-                gen_grid(100, 100, 0.5);
+                generatePalette(false); // Don't clear thumbnails when opening new file
             };
             reader.readAsDataURL(e.target.files[0]);
         }, false);
+
+        const repeatButton = document.getElementById("repeatButton");
+        repeatButton.addEventListener("click", () => generatePalette(true)); // Clear thumbnails when repeating
 
         function handleImageClick({ target }) {
             imageSrc.setAttribute('src',
@@ -333,7 +354,7 @@
 
             const button = document.createElement("div");
             button.classList.add('close');
-            let text = document.createTextNode('x');
+            let text = document.createTextNode('XX');
             button.appendChild(text);
             button.addEventListener('click', handleCloseClick);
 
