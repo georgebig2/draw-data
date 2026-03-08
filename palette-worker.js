@@ -66,16 +66,16 @@ function loadPaletteCSV(csvText) {
     for (const line of lines) {
         if (line.trim() === '') continue;
         const values = line.split(',').map(v => v.trim());
-        if (values.length > 2) {
+        if (values.length > 0) {
             // "$\\color{#FFFFFF}{\\rule{7px}{7px}}$ 600 white"
             // Parse the integer (e.g., 600) after the color block
-            const numMatch = values[2].match(/\}\$\s*(\d+)/);
+            const numMatch = values[0].match(/\}\$\s*(\d+)/);
             var number = 0;
             if (numMatch) {
                 number = parseInt(numMatch[1], 10);
             }
 
-            const match = values[2].match(/#([A-Fa-f0-9]{6})/);
+            const match = values[0].match(/#([A-Fa-f0-9]{6})/);
             if (match) {
                 palette.push([parseInt(match[0].replace('#', ''), 16), number]); // push as integer
             }
@@ -390,7 +390,7 @@ self.onmessage = async function (event) {
         let palette = loadPaletteCSV(data);
         if (!allPalettes || allPalettes.length === 0) {
             for(let i = 0; i < palette.length; i++) {
-                palette[i][1] *= -1;
+                //palette[i][1] *= -1;
             }
         }
         allPalettes = allPalettes.concat(palette);
