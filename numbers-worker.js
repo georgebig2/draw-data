@@ -30,7 +30,7 @@ self.onmessage = async function (event) {
     if (type === 'init') {
         self.postMessage({ type: 'ready' });
     } else if (type === 'makeNumbers') {
-        const { imgColor, imgPal, imgGrd, bVertPal = false } = data;
+        const { imgColor, imgPal, imgGrd, bVertPal } = data;
         try {
             var texCol = texFromImageData(imgColor);
             var texPal = texFromImageData(imgPal);
