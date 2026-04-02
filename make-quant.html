@@ -29,7 +29,7 @@
             display: inline-block;
             position: absolute;
             top: 0;
-            left: 30%;
+            left: 40%;
             max-height: 100%;
         }
 
@@ -50,7 +50,7 @@
             position: absolute;
             top: 0;
             left: 0;
-            max-width: 40%;
+            max-width: 50%;
             cursor: pointer;
         }
 
@@ -96,7 +96,7 @@
         .preview {
             position: absolute;
             top: 4%;
-            width: 25%;
+            width: 30%;
             height: 90vh;
             overflow-y: auto;
             scrollbar-width: thin;
@@ -134,16 +134,16 @@
         <div class="control-row">
             <label for="paletteSlider">colors</label>
             <input type="range" id="paletteSlider" min="20" max="100" value="30" />
-            <span id="paletteSliderValue">30</span>
+            <span id="paletteSliderValue">40</span>
         </div>
         <div class="control-row">
             <label for="randomSlider">merge</label>
             <input type="range" id="randomSlider" min="0" max="50" value="10" />
-            <span id="randomSliderValue">10</span>
+            <span id="randomSliderValue">5</span>
         </div>
         <div class="checkbox-row">
             <label for="filter">filter</label>
-            <input type="checkbox" id="filter" checked />
+            <input type="checkbox" id="filter" unchecked />
         </div>
 
         <button id="fileButton" type="button">Open image</button>
@@ -340,7 +340,7 @@
 
             const button = document.createElement("div");
             button.classList.add('close');
-            let text = document.createTextNode('x');
+            let text = document.createTextNode('XX');
             button.appendChild(text);
             button.addEventListener('click', handleCloseClick);
 
