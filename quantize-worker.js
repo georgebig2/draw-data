@@ -287,11 +287,12 @@ function updateKmeansOutputImageData(kmeans, pointsByColor, imgData, outputImgDa
         const lab = centroid.values;
         let rgb = lab2rgb(lab)
         rgb = rgb.map(v => Math.floor(v));
-        uniqueColors.add((rgb[0] << 16) | (rgb[1] << 8) | rgb[2]);
 
+        let colorCount = 0;
         for (const v of kmeans.pointsPerCategory[c]) {
             const pointRGB = v.tag;
             const pointColor = (pointRGB[0] << 16) | (pointRGB[1] << 8) | pointRGB[2];
+            colorCount += pointsByColor[pointColor].length;
             for (const pt of pointsByColor[pointColor]) {
                 const ptx = pt % width;
                 const pty = Math.floor(pt / width);
@@ -302,9 +303,11 @@ function updateKmeansOutputImageData(kmeans, pointsByColor, imgData, outputImgDa
                 odata[dataOffset + 3] = 255;
             }
         }
+
+        uniqueColors.add([(rgb[0] << 16) | (rgb[1] << 8) | rgb[2], colorCount]);
     }
     console.timeEnd("updateKmeansOutputImageData");
-    return uniqueColors.size;
+    return Array.from(uniqueColors).sort((a, b) => b[1] - a[1]).map(e => e[0]|(255 << 24));
 }
 
 function applyKMeansClustering(imgData, outputImgData, settings) {
@@ -457,7 +460,7 @@ self.onmessage = async function (event) {
     const { type, data } = event.data;
 
     if (type === 'init') {
-        self.postMessage({ type: 'ready' });
+        //self.postMessage({ type: 'ready' });
     } else if (type === 'generatePalette') {
         const { imageData, batch, paletteSize = 33, rndFactor = 10, filter = true } = data;
         console.log("generatePalette called in worker with batch size:", batch, "paletteSize:", paletteSize, "rndFactor:", rndFactor);
@@ -510,6 +513,74 @@ self.onmessage = async function (event) {
                 error: error.message
             });
         }
+    } else if (type === 'updateImageWithPalette') {
+        const { imageData, oldColors, newColors } = data;
+        console.time("updateImageWithPalette");
+
+        for (let i = 0; i < oldColors.length; i++) {
+            if (newColors[i] >> 24 === 0) {
+                // find nearest non-negative new color and replace
+                let nearestIdx = -1;
+                let nearestDist = Number.MAX_VALUE;
+                const rA = (oldColors[i] >> 16) & 0xff; const gA = (oldColors[i] >> 8) & 0xff; const bA = oldColors[i] & 0xff;
+                for (let j = 0; j < newColors.length; j++) {
+                    if (newColors[j] >> 24 !== 0) {
+                        const rgbA = [(oldColors[i] >> 16) & 255, (oldColors[i] >> 8) & 255, oldColors[i] & 255];
+                        const rgbB = [(newColors[j] >> 16) & 255, (newColors[j] >> 8) & 255, newColors[j] & 255];
+                        const A = rgb2lab(rgbA);
+                        const B = rgb2lab(rgbB);
+                        const distance = (
+                            (A[0] - B[0]) * (A[0] - B[0]) +
+                            (A[1] - B[1]) * (A[1] - B[1]) +
+                            (A[2] - B[2]) * (A[2] - B[2])
+                        );
+                        if (distance < nearestDist) {
+                            nearestDist = distance;
+                            nearestIdx = j;
+                        }
+                    }
+                }
+                if (nearestIdx !== -1) {
+                    newColors[i] = newColors[nearestIdx];
+                } else {
+                    newColors[i] = oldColors[i];
+                }
+            }
+        }
+
+        let colorMap = {};
+        for (let i = 0; i < oldColors.length; i++) {
+            colorMap[oldColors[i]&0xFFFFFF] = newColors[i];
+        }
+
+        let idata = imageData.data;
+        const width = imageData.width;
+        const height = imageData.height;
+        for (let j = 0; j < height; j++) {
+            for (let i = 0; i < width; i++) {
+                const idx = (j * width + i) * 4;
+                const r = idata[idx];
+                const g = idata[idx + 1];
+                const b = idata[idx + 2];
+                //const a = idata[idx + 3];
+                const colorKey = (r << 16) | (g << 8) | b;
+                const c = colorMap[colorKey];
+                if (c !== undefined) {
+                    const [newR, newG, newB] = [(c >> 16) & 0xff, (c >> 8) & 0xff, c & 0xff];
+                    idata[idx] = newR;
+                    idata[idx + 1] = newG;
+                    idata[idx + 2] = newB;
+                }
+            }
+        }
+        console.timeEnd("updateImageWithPalette");
+        self.postMessage({
+            type: 'updateImageResult',
+            data: {
+                imageData: imageData,
+            }
+        });
     }
+
 };
 
