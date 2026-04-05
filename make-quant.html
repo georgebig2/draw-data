@@ -320,7 +320,9 @@
                 imageSrc.getAttribute('src') != target.getAttribute('src') ? target.getAttribute('src') : mainImageSrc);
             curImage = target;
             fillPaletteGrid(target.newColors==undefined ? target.uniqueColors : target.newColors);
-            updateImageWithPalette();
+            
+            if (target.newColors != undefined)
+                updateImageWithPalette();
         }
         function handleCloseClick({ target }) {
             const thumbBar = document.querySelector('.thumb-bar');
