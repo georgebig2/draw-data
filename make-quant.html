@@ -188,6 +188,11 @@
             <input type="range" id="randomSlider" min="0" max="50" value="10" />
             <span id="randomSliderValue">5</span>
         </div>
+        <div class="control-row">
+            <label for="minSlider">min</label>
+            <input type="range" id="minSlider" min="0" max="5" value="0" />
+            <span id="minSliderValue">0</span>
+        </div>
         <div class="checkbox-row">
             <label for="filter">filter</label>
             <input type="checkbox" id="filter" unchecked />
@@ -210,11 +215,13 @@
         const fileButton = document.getElementById("fileButton");
         const progress = document.querySelector("progress");
         var fileInput = document.getElementById("fileInput");
-
+        
         const paletteSlider = document.getElementById('paletteSlider');
         const paletteSliderValue = document.getElementById('paletteSliderValue');
         const randomSlider = document.getElementById('randomSlider');
         const randomSliderValue = document.getElementById('randomSliderValue');
+        const minSlider = document.getElementById('minSlider');
+        const minSliderValue = document.getElementById('minSliderValue');
         if (paletteSlider && paletteSliderValue) {
             paletteSlider.addEventListener('input', () => {
                 paletteSliderValue.textContent = paletteSlider.value;
@@ -223,6 +230,11 @@
         if (randomSlider && randomSliderValue) {
             randomSlider.addEventListener('input', () => {
                 randomSliderValue.textContent = randomSlider.value;
+            });
+        }
+        if (minSlider && minSliderValue) {
+            minSlider.addEventListener('input', () => {
+                minSliderValue.textContent = minSlider.value;
             });
         }
         //paletteSlider.hidden = true;
@@ -319,8 +331,8 @@
             imageSrc.setAttribute('src',
                 imageSrc.getAttribute('src') != target.getAttribute('src') ? target.getAttribute('src') : mainImageSrc);
             curImage = target;
-            fillPaletteGrid(target.newColors==undefined ? target.uniqueColors : target.newColors);
-            
+            fillPaletteGrid(target.newColors == undefined ? target.uniqueColors : target.newColors);
+
             if (target.newColors != undefined)
                 updateImageWithPalette();
         }
@@ -343,6 +355,7 @@
                 const batch = 9 / gridWorkers.length;
                 const paletteSize = (typeof paletteSlider !== 'undefined' && paletteSlider && paletteSlider.value) ? parseInt(paletteSlider.value, 10) : 100;
                 const rndFactor = (typeof randomSlider !== 'undefined' && randomSlider && randomSlider.value) ? parseInt(randomSlider.value, 10) : 600;
+                const minFilterSize = (typeof minSlider !== 'undefined' && minSlider && minSlider.value) ? parseInt(minSlider.value, 10) : 0;
                 for (let i = 0; i < gridWorkers.length; i++) {
                     totalAssignedTasks += batch;
                     progress.value = completedTasks / totalAssignedTasks;
@@ -354,6 +367,7 @@
                             batch: batch,
                             paletteSize: paletteSize,
                             rndFactor: rndFactor,
+                            minFilterSize: minFilterSize,
                             filter: filter.checked,
                         }
                     });
@@ -430,7 +444,7 @@
             const thumbBar = document.querySelector('.thumb-bar');
             thumbBar.appendChild(box);
         }
-        
+
         document.getElementById('status').innerHTML = '';
 
         function updateImageWithPalette() {

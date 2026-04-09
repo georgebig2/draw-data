@@ -307,7 +307,7 @@ function updateKmeansOutputImageData(kmeans, pointsByColor, imgData, outputImgDa
         uniqueColors.add([(rgb[0] << 16) | (rgb[1] << 8) | rgb[2], colorCount]);
     }
     console.timeEnd("updateKmeansOutputImageData");
-    return Array.from(uniqueColors).sort((a, b) => b[1] - a[1]).map(e => e[0]|(255 << 24));
+    return Array.from(uniqueColors).sort((a, b) => b[1] - a[1]).map(e => e[0] | (255 << 24));
 }
 
 function applyKMeansClustering(imgData, outputImgData, settings) {
@@ -462,8 +462,8 @@ self.onmessage = async function (event) {
     if (type === 'init') {
         //self.postMessage({ type: 'ready' });
     } else if (type === 'generatePalette') {
-        const { imageData, batch, paletteSize = 33, rndFactor = 10, filter = true } = data;
-        console.log("generatePalette called in worker with batch size:", batch, "paletteSize:", paletteSize, "rndFactor:", rndFactor);
+        const { imageData, batch, paletteSize = 33, rndFactor = 10, minFilterSize = 0, filter = true } = data;
+        console.log("generatePalette called in worker with batch size:", batch, "paletteSize:", paletteSize, "rndFactor:", rndFactor, "minFilterSize:", minFilterSize);
         try {
             for (let i = 0; i < batch; i++) {
                 const settings = new Settings(true);
@@ -474,10 +474,12 @@ self.onmessage = async function (event) {
                 settings.removeNearestColorsThreshold = rndFactor;
                 settings.random = random;
 
+                const imageData2 = cloneImageData(imageData);
+
                 if (filter) {
                     console.time("pyrMeanShiftFiltering");
                     let srcNoAlpha = new cv2.Mat();
-                    let src = cv2.matFromImageData(imageData);
+                    let src = cv2.matFromImageData(imageData2);
                     cv2.cvtColor(src, srcNoAlpha, cv2.COLOR_RGBA2RGB);
                     src.delete();
                     let dst = new cv2.Mat();
@@ -491,17 +493,39 @@ self.onmessage = async function (event) {
                     dst.delete();
                     const pyrMeanShiftImgData = new ImageData(new Uint8ClampedArray(dstRGBA.data), dstRGBA.cols, dstRGBA.rows);
                     dstRGBA.delete();
-                    imageData.data.set(pyrMeanShiftImgData.data);
+                    imageData2.data.set(pyrMeanShiftImgData.data);
                     console.timeEnd("pyrMeanShiftFiltering");
                 }
 
-                const kmeansImgData = cloneImageData(imageData);
-                const uniqueColors = applyKMeansClustering(imageData, kmeansImgData, settings);
+                {
+                    console.time("morphology");
+                    for (let pass = 0; pass < minFilterSize; pass++) {
+                        let srcNoAlpha = new cv2.Mat();
+                        let src = cv2.matFromImageData(imageData2);
+                        cv2.cvtColor(src, srcNoAlpha, cv2.COLOR_RGBA2RGB);
+                        src.delete();
+                        let dst = new cv2.Mat();
+
+                        cv2.morphologyEx(srcNoAlpha, dst, cv2.MORPH_ERODE, cv2.getStructuringElement(cv2.MORPH_CROSS, new cv2.Size(2, 2)));
+                        srcNoAlpha.delete();
+
+                        let dstRGBA = new cv2.Mat();
+                        cv2.cvtColor(dst, dstRGBA, cv2.COLOR_RGB2RGBA);
+                        dst.delete();
+                        const newImageData = new ImageData(new Uint8ClampedArray(dstRGBA.data), dstRGBA.cols, dstRGBA.rows);
+                        dstRGBA.delete();
+                        imageData2.data.set(newImageData.data);
+                    }
+                    console.timeEnd("morphology");
+                }
+
+                const imageData3 = cloneImageData(imageData2);
+                const uniqueColors = applyKMeansClustering(imageData2, imageData3, settings);
 
                 self.postMessage({
                     type: 'paletteResult',
                     data: {
-                        imageData: kmeansImgData,
+                        imageData: imageData3,
                         kMeansNrOfClusters: settings.kMeansNrOfClusters,
                         uniqueColors: uniqueColors
                     }
@@ -550,7 +574,7 @@ self.onmessage = async function (event) {
 
         let colorMap = {};
         for (let i = 0; i < oldColors.length; i++) {
-            colorMap[oldColors[i]&0xFFFFFF] = newColors[i];
+            colorMap[oldColors[i] & 0xFFFFFF] = newColors[i];
         }
 
         let idata = imageData.data;
