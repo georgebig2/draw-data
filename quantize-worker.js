@@ -497,25 +497,29 @@ self.onmessage = async function (event) {
                     console.timeEnd("pyrMeanShiftFiltering");
                 }
 
-                {
+                if (minFilterSize > 0) {
                     console.time("morphology");
-                    for (let pass = 0; pass < minFilterSize; pass++) {
-                        let srcNoAlpha = new cv2.Mat();
-                        let src = cv2.matFromImageData(imageData2);
-                        cv2.cvtColor(src, srcNoAlpha, cv2.COLOR_RGBA2RGB);
-                        src.delete();
-                        let dst = new cv2.Mat();
+                    let srcNoAlpha = new cv2.Mat();
+                    let src = cv2.matFromImageData(imageData2);
+                    cv2.cvtColor(src, srcNoAlpha, cv2.COLOR_RGBA2RGB);
+                    src.delete();
+                    let dst = new cv2.Mat();
 
-                        cv2.morphologyEx(srcNoAlpha, dst, cv2.MORPH_ERODE, cv2.getStructuringElement(cv2.MORPH_CROSS, new cv2.Size(2, 2)));
-                        srcNoAlpha.delete();
+                    const iters = [0, 1, 1, 2, 3, 4, 3, 5];
+                    const sizes = [0, 2, 3, 2, 2, 2, 3, 2];
+                    const iter = iters[Math.min(iters.length - 1, minFilterSize)];
+                    const size = sizes[Math.min(sizes.length - 1, minFilterSize)];
 
-                        let dstRGBA = new cv2.Mat();
-                        cv2.cvtColor(dst, dstRGBA, cv2.COLOR_RGB2RGBA);
-                        dst.delete();
-                        const newImageData = new ImageData(new Uint8ClampedArray(dstRGBA.data), dstRGBA.cols, dstRGBA.rows);
-                        dstRGBA.delete();
-                        imageData2.data.set(newImageData.data);
-                    }
+                    cv2.morphologyEx(srcNoAlpha, dst, cv2.MORPH_ERODE, 
+                        cv2.getStructuringElement(cv2.MORPH_CROSS, new cv2.Size(size, size)), new cv2.Point(-1, -1), iter);
+                    srcNoAlpha.delete();
+
+                    let dstRGBA = new cv2.Mat();
+                    cv2.cvtColor(dst, dstRGBA, cv2.COLOR_RGB2RGBA);
+                    dst.delete();
+                    const newImageData = new ImageData(new Uint8ClampedArray(dstRGBA.data), dstRGBA.cols, dstRGBA.rows);
+                    dstRGBA.delete();
+                    imageData2.data.set(newImageData.data);
                     console.timeEnd("morphology");
                 }
 
