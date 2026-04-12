@@ -565,7 +565,7 @@ self.onmessage = async function (event) {
                     }
                 }
                 oldColors = Array.from(colorLut.entries())
-                    .sort((a, b) => b[1].num - a[1].num).map((e) => -e[0]);
+                    .sort((a, b) => b[1].num - a[1].num).map((e) => (e[0] | (255 << 24)));
             }
 
             console.timeEnd("morphology");
