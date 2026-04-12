@@ -516,7 +516,7 @@ self.onmessage = async function (event) {
             });
         }
     } else if (type === 'updateImageWithPalette') {
-        let { imageData, oldColors, newColors, minFilterSize } = data;
+        const { imageData, oldColors, newColors, minFilterSize } = data;
 
         if (minFilterSize > 0) {
             console.time("morphology");
@@ -542,19 +542,16 @@ self.onmessage = async function (event) {
             dstRGBA.delete();
             imageData.data.set(newImageData.data);
 
-            // calculate unique colors after morphology
+            // convert to oldColors palette after morphology
             {
                 let colorLut = new Map();
                 let idx = 0;
-                let data = imageData.data;
+                let idata = imageData.data;
                 const width = imageData.width;
                 const height = imageData.height;
                 for (let j = 0; j < height; j++) {
                     for (let i = 0; i < width; i++) {
-                        const r = data[idx++];
-                        const g = data[idx++];
-                        const b = data[idx++];
-                        idx++;
+                        const r = idata[idx++]; const g = idata[idx++]; const b = idata[idx++]; idx++;
                         const colorKey = r << 16 | g << 8 | b;
                         const entry = colorLut.get(colorKey);
                         if (entry) {
@@ -564,8 +561,41 @@ self.onmessage = async function (event) {
                         }
                     }
                 }
-                oldColors = Array.from(colorLut.entries())
-                    .sort((a, b) => b[1].num - a[1].num).map((e) => (e[0] | (255 << 24)));
+                const cc = Array.from(colorLut.entries()).map((e) => e[0]);//.sort((a, b) => b[1].num - a[1].num).map((e) => (e[0] | (255 << 24)));
+
+                let colorMap = {};
+                for (let i = 0; i < cc.length; i++) {
+                    let nearestIdx = -1;
+                    let nearestDist = Number.MAX_VALUE;
+                    const rA = (cc[i] >> 16) & 0xff; const gA = (cc[i] >> 8) & 0xff; const bA = cc[i] & 0xff;
+                    for (let j = 0; j < oldColors.length; j++) {
+                        const rgbA = [(oldColors[j] >> 16) & 255, (oldColors[j] >> 8) & 255, oldColors[j] & 255];
+                        const rgbB = [(cc[i] >> 16) & 255, (cc[i] >> 8) & 255, cc[i] & 255];
+                        const A = rgb2lab(rgbA);
+                        const B = rgb2lab(rgbB);
+                        const distance = ((A[0] - B[0]) * (A[0] - B[0]) + (A[1] - B[1]) * (A[1] - B[1]) + (A[2] - B[2]) * (A[2] - B[2]));
+                        if (distance < nearestDist) {
+                            nearestDist = distance;
+                            nearestIdx = j;
+                        }
+                    }
+                    colorMap[cc[i]] = oldColors[nearestIdx];
+                }
+
+                for (let j = 0; j < height; j++) {
+                    for (let i = 0; i < width; i++) {
+                        const idx = (j * width + i) * 4;
+                        const r = idata[idx]; const g = idata[idx + 1]; const b = idata[idx + 2]; //const a = idata[idx + 3];
+                        const colorKey = (r << 16) | (g << 8) | b;
+                        const c = colorMap[colorKey];
+                        //if (c !== undefined) {
+                            const [newR, newG, newB] = [(c >> 16) & 0xff, (c >> 8) & 0xff, c & 0xff];
+                            idata[idx] = newR;
+                            idata[idx + 1] = newG;
+                            idata[idx + 2] = newB;
+                        //}
+                    }
+                }
             }
 
             console.timeEnd("morphology");
@@ -574,7 +604,6 @@ self.onmessage = async function (event) {
         console.time("updateImageWithPalette");
         for (let i = 0; i < oldColors.length; i++) {
             if (newColors[i] >> 24 === 0) {
-                // find nearest non-negative new color and replace
                 let nearestIdx = -1;
                 let nearestDist = Number.MAX_VALUE;
                 const rA = (oldColors[i] >> 16) & 0xff; const gA = (oldColors[i] >> 8) & 0xff; const bA = oldColors[i] & 0xff;
