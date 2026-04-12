@@ -516,7 +516,7 @@ self.onmessage = async function (event) {
             });
         }
     } else if (type === 'updateImageWithPalette') {
-        const { imageData, oldColors, newColors, minFilterSize } = data;
+        let { imageData, oldColors, newColors, minFilterSize } = data;
 
         if (minFilterSize > 0) {
             console.time("morphology");
@@ -541,6 +541,33 @@ self.onmessage = async function (event) {
             const newImageData = new ImageData(new Uint8ClampedArray(dstRGBA.data), dstRGBA.cols, dstRGBA.rows);
             dstRGBA.delete();
             imageData.data.set(newImageData.data);
+
+            // calculate unique colors after morphology
+            {
+                let colorLut = new Map();
+                let idx = 0;
+                let data = imageData.data;
+                const width = imageData.width;
+                const height = imageData.height;
+                for (let j = 0; j < height; j++) {
+                    for (let i = 0; i < width; i++) {
+                        const r = data[idx++];
+                        const g = data[idx++];
+                        const b = data[idx++];
+                        idx++;
+                        const colorKey = r << 16 | g << 8 | b;
+                        const entry = colorLut.get(colorKey);
+                        if (entry) {
+                            entry.num++;
+                        } else {
+                            colorLut.set(colorKey, { colorKey: colorKey, num: 1 });
+                        }
+                    }
+                }
+                oldColors = Array.from(colorLut.entries())
+                    .sort((a, b) => b[1].num - a[1].num).map((e) => -e[0]);
+            }
+
             console.timeEnd("morphology");
         }
 

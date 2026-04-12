@@ -359,10 +359,8 @@
             curImage = target;
 
             fillPaletteGrid(target.newColors == undefined ? target.uniqueColors : target.newColors);
-            if (target.minFilterSize != undefined) {
-                minSlider.value = target.minFilterSize;
-                minSliderValue.textContent = target.minFilterSize;
-            }
+            minSlider.value = target.minFilterSize != undefined ? target.minFilterSize : 0;
+            minSliderValue.textContent = minSlider.value;
 
             if (target.newColors != undefined)
                 updateImageWithPalette();
