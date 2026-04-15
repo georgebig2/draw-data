@@ -383,7 +383,7 @@
             let imageData = loadImage(image);
             if (imageData.width > 0) {
                 // Distribute the batch across the worker pool to run in parallel
-                const batch = 1 / gridWorkers.length;
+                const batch = 9 / gridWorkers.length;
                 const paletteSize = (typeof paletteSlider !== 'undefined' && paletteSlider && paletteSlider.value) ? parseInt(paletteSlider.value, 10) : 100;
                 const rndFactor = (typeof randomSlider !== 'undefined' && randomSlider && randomSlider.value) ? parseInt(randomSlider.value, 10) : 600;
                 for (let i = 0; i < gridWorkers.length; i++) {
