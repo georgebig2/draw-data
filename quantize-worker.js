@@ -307,7 +307,7 @@ function updateKmeansOutputImageData(kmeans, pointsByColor, imgData, outputImgDa
         uniqueColors.add([(rgb[0] << 16) | (rgb[1] << 8) | rgb[2], colorCount]);
     }
     console.timeEnd("updateKmeansOutputImageData");
-    return Array.from(uniqueColors).sort((a, b) => b[1] - a[1]).map(e => e[0] | (255 << 24));
+    return Array.from(uniqueColors).sort((a, b) => b[1] - a[1]).map(e => ({ hex: e[0] | (255 << 24) }));
 }
 
 function applyKMeansClustering(imgData, outputImgData, settings) {
@@ -439,6 +439,180 @@ function applyKMeansClustering(imgData, outputImgData, settings) {
     return updateKmeansOutputImageData(kmeans, pointsByColor, imgData, outputImgData);
 }
 
+function doThinning(cv2, imageData, newColors) {
+    console.time("doThinning");
+    const data = imageData.data;
+    const width = imageData.width;
+    const height = imageData.height;
+    /*let srcNoAlpha = new cv2.Mat();
+    
+    let src = cv2.matFromImageData(imageData);
+    cv2.cvtColor(src, srcNoAlpha, cv2.COLOR_RGBA2RGB);
+    src.delete();
+
+    let dst = new cv2.Mat();
+    cv2.morphologyEx(srcNoAlpha, dst, cv2.MORPH_DILATE,
+        cv2.getStructuringElement(cv2.MORPH_RECT, new cv2.Size(3, 3)), new cv2.Point(-1, -1), 3);
+    srcNoAlpha.delete();
+
+    let dstRGBA = new cv2.Mat();
+    cv2.cvtColor(dst, dstRGBA, cv2.COLOR_RGB2RGBA);
+    dst.delete();
+
+    idx = 0;
+    const mdata = dstRGBA.data;
+    for (let j = 0; j < height; j++) {
+        for (let i = 0; i < width; i++) {
+            const sr = data[idx];
+            const sg = data[idx + 1];
+            const sb = data[idx + 2];
+            const dr = mdata[idx];
+            const dg = mdata[idx + 1];
+            const db = mdata[idx + 2];
+            const dist = (dr - sr) * (dr - sr) + (dg - sg) * (dg - sg) + (db - sb) * (db - sb);
+            binary[j * width + i] = dist > 80*80 ? 1 : 0;
+            idx += 4;
+        }
+    }
+    dstRGBA.delete();*/
+
+    for (let c of newColors) {
+        if (c.thickness === undefined || c.thickness === 0)
+            continue;
+
+        const chex = c.hex & 0xffffff;
+        const binary = new Uint8Array(width * height);
+        let idx = 0;
+        for (let j = 0; j < height; j++) {
+            for (let i = 0; i < width; i++) {
+                const r = data[idx];
+                const g = data[idx + 1];
+                const b = data[idx + 2];
+                const hex = (r << 16) | (g << 8) | b;
+                //const brightness = 0.299 * r + 0.587 * g + 0.114 * b;
+                binary[j * width + i] = (hex == chex) ? 1 : 0;
+                idx += 4;
+            }
+        }
+
+        // apply Zhang-Suen thinning algorithm
+        let changed = true;
+        for (let pass = 0; pass < 4 && changed; pass++) {
+            changed = false;
+            const toRemove = [];
+
+            // Pass 1
+            for (let j = 1; j < height - 1; j++) {
+                for (let i = 1; i < width - 1; i++) {
+                    if (binary[j * width + i] === 0) continue;
+
+                    const p2 = binary[(j - 1) * width + i];
+                    const p3 = binary[(j - 1) * width + i + 1];
+                    const p4 = binary[j * width + i + 1];
+                    const p5 = binary[(j + 1) * width + i + 1];
+                    const p6 = binary[(j + 1) * width + i];
+                    const p7 = binary[(j + 1) * width + i - 1];
+                    const p8 = binary[j * width + i - 1];
+                    const p9 = binary[(j - 1) * width + i - 1];
+
+                    const neighbors = p2 + p3 + p4 + p5 + p6 + p7 + p8 + p9;
+                    // Condition 1: 2 <= N(p) <= 6
+                    if (neighbors < 2 || neighbors > 6) continue;
+
+                    // Condition 2: S(p) = 1 (number of transitions from 0 to 1)
+                    const transitions =
+                        (p2 === 0 && p3 === 1 ? 1 : 0) +
+                        (p3 === 0 && p4 === 1 ? 1 : 0) +
+                        (p4 === 0 && p5 === 1 ? 1 : 0) +
+                        (p5 === 0 && p6 === 1 ? 1 : 0) +
+                        (p6 === 0 && p7 === 1 ? 1 : 0) +
+                        (p7 === 0 && p8 === 1 ? 1 : 0) +
+                        (p8 === 0 && p9 === 1 ? 1 : 0) +
+                        (p9 === 0 && p2 === 1 ? 1 : 0);
+                    if (transitions !== 1) continue;
+
+                    // Condition 3: p2 * p4 * p6 = 0 (at least one of N, E, S is white)
+                    if (p2 * p4 * p6 !== 0) continue;
+
+                    // Condition 4: p4 * p6 * p8 = 0 (at least one of E, S, W is white)
+                    if (p4 * p6 * p8 !== 0) continue;
+
+                    toRemove.push(j * width + i);
+                }
+            }
+            for (const idx of toRemove) {
+                binary[idx] = 0;
+                changed = true;
+            }
+
+            // Pass 2
+            toRemove.length = 0;
+            for (let j = 1; j < height - 1; j++) {
+                for (let i = 1; i < width - 1; i++) {
+                    if (binary[j * width + i] === 0) continue;
+
+                    const p2 = binary[(j - 1) * width + i];
+                    const p3 = binary[(j - 1) * width + i + 1];
+                    const p4 = binary[j * width + i + 1];
+                    const p5 = binary[(j + 1) * width + i + 1];
+                    const p6 = binary[(j + 1) * width + i];
+                    const p7 = binary[(j + 1) * width + i - 1];
+                    const p8 = binary[j * width + i - 1];
+                    const p9 = binary[(j - 1) * width + i - 1];
+
+                    const neighbors = p2 + p3 + p4 + p5 + p6 + p7 + p8 + p9;
+                    if (neighbors < 2 || neighbors > 6) continue;
+
+                    const transitions =
+                        (p2 === 0 && p3 === 1 ? 1 : 0) +
+                        (p3 === 0 && p4 === 1 ? 1 : 0) +
+                        (p4 === 0 && p5 === 1 ? 1 : 0) +
+                        (p5 === 0 && p6 === 1 ? 1 : 0) +
+                        (p6 === 0 && p7 === 1 ? 1 : 0) +
+                        (p7 === 0 && p8 === 1 ? 1 : 0) +
+                        (p8 === 0 && p9 === 1 ? 1 : 0) +
+                        (p9 === 0 && p2 === 1 ? 1 : 0);
+                    if (transitions !== 1) continue;
+
+                    // Condition 3: p2 * p4 * p8 = 0 (at least one of N, E, W is white)
+                    if (p2 * p4 * p8 !== 0) continue;
+
+                    // Condition 4: p2 * p6 * p8 = 0 (at least one of N, S, W is white)
+                    if (p2 * p6 * p8 !== 0) continue;
+
+                    toRemove.push(j * width + i);
+                }
+            }
+            for (const idx of toRemove) {
+                binary[idx] = 0;
+                changed = true;
+            }
+        }
+
+        // morphology
+        let src = cv2.matFromArray(height, width, cv2.CV_8U, binary);
+        let dst = new cv2.Mat();
+        cv2.morphologyEx(src, dst, cv2.MORPH_DILATE,
+            cv2.getStructuringElement(cv2.MORPH_ELLIPSE, new cv2.Size(3, 3)), new cv2.Point(-1, -1), c.thickness);
+        src.delete();
+
+        const mdata = dst.data;
+        idx = 0;
+        for (let j = 0; j < height; j++) {
+            for (let i = 0; i < width; i++, idx += 4) {
+                if (mdata[j*width + i] === 0)
+                    continue;
+                data[idx] = chex >> 16 & 0xff;
+                data[idx + 1] = chex >> 8 & 0xff;
+                data[idx + 2] = chex & 0xff;
+            }
+        }
+        dst.delete();
+    }
+
+    console.timeEnd("doThinning");
+}
+
 function loadOpenCV() {
     try {
         importScripts('./opencv2.js');
@@ -516,11 +690,12 @@ self.onmessage = async function (event) {
             });
         }
     } else if (type === 'updateImageWithPalette') {
-        const { imageData, oldColors, newColors, minFilterSize } = data;
+        const { imageData, oldColors, newColors } = data;
 
-        if (minFilterSize > 0) {
+        if (0) {
             console.time("morphology");
-            let srcNoAlpha = new cv2.Mat();
+
+            /*let srcNoAlpha = new cv2.Mat();
             let src = cv2.matFromImageData(imageData);
             cv2.cvtColor(src, srcNoAlpha, cv2.COLOR_RGBA2RGB);
             src.delete();
@@ -540,7 +715,7 @@ self.onmessage = async function (event) {
             dst.delete();
             const newImageData = new ImageData(new Uint8ClampedArray(dstRGBA.data), dstRGBA.cols, dstRGBA.rows);
             dstRGBA.delete();
-            imageData.data.set(newImageData.data);
+            imageData.data.set(newImageData.data);*/
 
             // convert to oldColors palette after morphology
             {
@@ -569,7 +744,7 @@ self.onmessage = async function (event) {
                     let nearestDist = Number.MAX_VALUE;
                     const rA = (cc[i] >> 16) & 0xff; const gA = (cc[i] >> 8) & 0xff; const bA = cc[i] & 0xff;
                     for (let j = 0; j < oldColors.length; j++) {
-                        const rgbA = [(oldColors[j] >> 16) & 255, (oldColors[j] >> 8) & 255, oldColors[j] & 255];
+                        const rgbA = [(oldColors[j].hex >> 16) & 255, (oldColors[j].hex >> 8) & 255, oldColors[j].hex & 255];
                         const rgbB = [(cc[i] >> 16) & 255, (cc[i] >> 8) & 255, cc[i] & 255];
                         const A = rgb2lab(rgbA);
                         const B = rgb2lab(rgbB);
@@ -579,7 +754,7 @@ self.onmessage = async function (event) {
                             nearestIdx = j;
                         }
                     }
-                    colorMap[cc[i]] = oldColors[nearestIdx];
+                    colorMap[cc[i]] = oldColors[nearestIdx].hex;
                 }
 
                 for (let j = 0; j < height; j++) {
@@ -589,10 +764,10 @@ self.onmessage = async function (event) {
                         const colorKey = (r << 16) | (g << 8) | b;
                         const c = colorMap[colorKey];
                         //if (c !== undefined) {
-                            const [newR, newG, newB] = [(c >> 16) & 0xff, (c >> 8) & 0xff, c & 0xff];
-                            idata[idx] = newR;
-                            idata[idx + 1] = newG;
-                            idata[idx + 2] = newB;
+                        const [newR, newG, newB] = [(c >> 16) & 0xff, (c >> 8) & 0xff, c & 0xff];
+                        idata[idx] = newR;
+                        idata[idx + 1] = newG;
+                        idata[idx + 2] = newB;
                         //}
                     }
                 }
@@ -603,14 +778,14 @@ self.onmessage = async function (event) {
 
         console.time("updateImageWithPalette");
         for (let i = 0; i < oldColors.length; i++) {
-            if (newColors[i] >> 24 === 0) {
+            if (newColors[i].hex >> 24 === 0) {
                 let nearestIdx = -1;
                 let nearestDist = Number.MAX_VALUE;
-                const rA = (oldColors[i] >> 16) & 0xff; const gA = (oldColors[i] >> 8) & 0xff; const bA = oldColors[i] & 0xff;
+                const rA = (oldColors[i].hex >> 16) & 0xff; const gA = (oldColors[i].hex >> 8) & 0xff; const bA = oldColors[i].hex & 0xff;
                 for (let j = 0; j < newColors.length; j++) {
-                    if (newColors[j] >> 24 !== 0) {
-                        const rgbA = [(oldColors[i] >> 16) & 255, (oldColors[i] >> 8) & 255, oldColors[i] & 255];
-                        const rgbB = [(newColors[j] >> 16) & 255, (newColors[j] >> 8) & 255, newColors[j] & 255];
+                    if (newColors[j].hex >> 24 !== 0) {
+                        const rgbA = [(oldColors[i].hex >> 16) & 255, (oldColors[i].hex >> 8) & 255, oldColors[i].hex & 255];
+                        const rgbB = [(newColors[j].hex >> 16) & 255, (newColors[j].hex >> 8) & 255, newColors[j].hex & 255];
                         const A = rgb2lab(rgbA);
                         const B = rgb2lab(rgbB);
                         const distance = (
@@ -625,16 +800,16 @@ self.onmessage = async function (event) {
                     }
                 }
                 if (nearestIdx !== -1) {
-                    newColors[i] = newColors[nearestIdx];
+                    newColors[i].hex = newColors[nearestIdx].hex;
                 } else {
-                    newColors[i] = oldColors[i];
+                    newColors[i].hex = oldColors[i].hex;
                 }
             }
         }
 
         let colorMap = {};
         for (let i = 0; i < oldColors.length; i++) {
-            colorMap[oldColors[i] & 0xFFFFFF] = newColors[i];
+            colorMap[oldColors[i].hex & 0xFFFFFF] = newColors[i].hex;
         }
 
         let idata = imageData.data;
@@ -658,6 +833,9 @@ self.onmessage = async function (event) {
             }
         }
         console.timeEnd("updateImageWithPalette");
+
+        doThinning(cv2, imageData, newColors);
+
         self.postMessage({
             type: 'updateImageResult',
             data: {

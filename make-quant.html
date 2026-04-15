@@ -260,6 +260,8 @@
         if (minSlider && minSliderValue) {
             minSlider.addEventListener('input', () => {
                 minSliderValue.textContent = minSlider.value;
+                if (curColorBox)
+                    curColorBox.minSliderValue = minSlider.value;
                 updateImageWithPalette();
             });
         }
@@ -359,8 +361,8 @@
             curImage = target;
 
             fillPaletteGrid(target.newColors == undefined ? target.uniqueColors : target.newColors);
-            minSlider.value = target.minFilterSize != undefined ? target.minFilterSize : 0;
-            minSliderValue.textContent = minSlider.value;
+            //minSlider.value = target.minFilterSize != undefined ? target.minFilterSize : 0;
+            //minSliderValue.textContent = minSlider.value;
 
             if (target.newColors != undefined)
                 updateImageWithPalette();
@@ -381,10 +383,9 @@
             let imageData = loadImage(image);
             if (imageData.width > 0) {
                 // Distribute the batch across the worker pool to run in parallel
-                const batch = 9 / gridWorkers.length;
+                const batch = 1 / gridWorkers.length;
                 const paletteSize = (typeof paletteSlider !== 'undefined' && paletteSlider && paletteSlider.value) ? parseInt(paletteSlider.value, 10) : 100;
                 const rndFactor = (typeof randomSlider !== 'undefined' && randomSlider && randomSlider.value) ? parseInt(randomSlider.value, 10) : 600;
-                //const minFilterSize = (typeof minSlider !== 'undefined' && minSlider && minSlider.value) ? parseInt(minSlider.value, 10) : 0;
                 for (let i = 0; i < gridWorkers.length; i++) {
                     totalAssignedTasks += batch;
                     progress.value = completedTasks / totalAssignedTasks;
@@ -396,7 +397,6 @@
                             batch: batch,
                             paletteSize: paletteSize,
                             rndFactor: rndFactor,
-                            //minFilterSize: minFilterSize,
                             filter: filter.checked,
                         }
                     });
@@ -479,10 +479,8 @@
         function updateImageWithPalette() {
             if (!curImage)
                 return;
-            const minFilterSize = (typeof minSlider !== 'undefined' && minSlider && minSlider.value) ? parseInt(minSlider.value, 10) : 0;
-            const newColors = readPaletteGrid();
-            curImage.newColors = newColors;
-            curImage.minFilterSize = minFilterSize;
+            //const minFilterSize = (typeof minSlider !== 'undefined' && minSlider && minSlider.value) ? parseInt(minSlider.value, 10) : 0;
+            curImage.newColors = readPaletteGrid();
 
             const imageData = loadImage(curImage);
             gridWorkers[0].postMessage({
@@ -490,12 +488,12 @@
                 data: {
                     imageData: imageData,
                     oldColors: curImage.uniqueColors,
-                    newColors: newColors,
-                    minFilterSize: minFilterSize,
+                    newColors: curImage.newColors,
                 }
             });
         }
 
+        var curColorBox = null;
         function initPaletteGrid() {
             const paletteGrid = document.getElementById('paletteGrid');
             const cols = 4;
@@ -510,7 +508,7 @@
                 colorInput.dataset.index = i;
                 colorInput.value = '#ffffff';
                 colorInput.addEventListener('click', (e) => {
-                    if (!e.ctrlKey) {
+                    if (!e.shiftKey) {
                         e.preventDefault();
                         return false;
                     }
@@ -519,7 +517,11 @@
                     updateImageWithPalette();
                 });
                 box.addEventListener('click', (e) => {
-                    if (!e.ctrlKey) {
+                    curColorBox = box;
+                    minSlider.value = curColorBox.minSliderValue != undefined ? curColorBox.minSliderValue : 0;
+                    minSliderValue.textContent = minSlider.value;
+
+                    if (!e.shiftKey) {
                         box.classList.toggle('hidden');
                         updateImageWithPalette();
                     }
@@ -534,7 +536,7 @@
             const colorInputs = paletteGrid.querySelectorAll('input[type="color"]');
             colorInputs.forEach((input, index) => {
                 if (index < uniqueColors.length) {
-                    const intColor = uniqueColors[index];
+                    const intColor = uniqueColors[index].hex;
                     const a = (intColor >> 24) & 0xff;
                     if (a === 0) {
                         input.parentElement.classList.add('hidden');
@@ -545,8 +547,10 @@
                     const g = (intColor >> 8) & 0xff;
                     const b = intColor & 0xff;
                     input.value = `rgb(${r}, ${g}, ${b})`;
+                    input.parentElement.minSliderValue = uniqueColors[index].thickness != undefined ? uniqueColors[index].thickness : 0;
                 } else {
                     input.value = 'rgb(255, 212, 183)';
+                    input.parentElement.minSliderValue = 0;
                 }
             });
         }
@@ -561,7 +565,12 @@
                 const a = input.parentElement.classList.contains('hidden') ? 0 : 255;
                 const hex = input.value.replace(/^#/, '');
                 const intColor = parseInt(hex, 16) | (a << 24);
-                colors.push(intColor);
+
+                let thickness = 0;
+                if (input.parentElement.minSliderValue != undefined) {
+                    thickness = parseInt(input.parentElement.minSliderValue, 10);
+                }
+                colors.push({ hex: intColor, thickness: thickness});
             });
             return colors;
         }
