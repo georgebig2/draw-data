@@ -444,37 +444,40 @@ function doThinning(cv2, imageData, newColors) {
     const data = imageData.data;
     const width = imageData.width;
     const height = imageData.height;
-    /*let srcNoAlpha = new cv2.Mat();
-    
-    let src = cv2.matFromImageData(imageData);
-    cv2.cvtColor(src, srcNoAlpha, cv2.COLOR_RGBA2RGB);
-    src.delete();
 
-    let dst = new cv2.Mat();
-    cv2.morphologyEx(srcNoAlpha, dst, cv2.MORPH_DILATE,
-        cv2.getStructuringElement(cv2.MORPH_RECT, new cv2.Size(3, 3)), new cv2.Point(-1, -1), 3);
-    srcNoAlpha.delete();
-
-    let dstRGBA = new cv2.Mat();
-    cv2.cvtColor(dst, dstRGBA, cv2.COLOR_RGB2RGBA);
-    dst.delete();
-
-    idx = 0;
-    const mdata = dstRGBA.data;
-    for (let j = 0; j < height; j++) {
-        for (let i = 0; i < width; i++) {
-            const sr = data[idx];
-            const sg = data[idx + 1];
-            const sb = data[idx + 2];
-            const dr = mdata[idx];
-            const dg = mdata[idx + 1];
-            const db = mdata[idx + 2];
-            const dist = (dr - sr) * (dr - sr) + (dg - sg) * (dg - sg) + (db - sb) * (db - sb);
-            binary[j * width + i] = dist > 80*80 ? 1 : 0;
-            idx += 4;
-        }
+    /*let background = new cv2.Mat();
+    let recolors = new Set();
+    for (let c of newColors) {
+        if (c.thickness !== undefined && c.thickness > 0)
+            recolors.add(c.hex & 0xffffff);
     }
-    dstRGBA.delete();*/
+    if (1) {
+        let srcNoAlpha = new cv2.Mat();
+        let src = cv2.matFromImageData(imageData);
+        cv2.cvtColor(src, srcNoAlpha, cv2.COLOR_RGBA2RGB);
+        src.delete();
+
+        // recolor pixels to white if they are in recolors, to make them more likely to be eroded
+        const mdata = srcNoAlpha.data;
+        idx = 0;
+        for (let j = 0; j < height; j++) {
+            for (let i = 0; i < width; i++, idx += 3) {                
+                const r = mdata[idx];
+                const g = mdata[idx + 1];
+                const b = mdata[idx + 2];
+                const hex = (r << 16) | (g << 8) | b;
+                if (recolors.has(hex)) {
+                    mdata[idx] = 0;
+                    mdata[idx + 1] = 0;
+                    mdata[idx + 2] = 0;
+                }
+            }
+        }
+
+        cv2.morphologyEx(srcNoAlpha, background, cv2.MORPH_DILATE,
+            cv2.getStructuringElement(cv2.MORPH_ELLIPSE, new cv2.Size(3, 3)), new cv2.Point(-1, -1), 5);
+        srcNoAlpha.delete();
+    }*/
 
     for (let c of newColors) {
         if (c.thickness === undefined || c.thickness === 0)
@@ -589,26 +592,35 @@ function doThinning(cv2, imageData, newColors) {
             }
         }
 
-        // morphology
+        // dilate the thinned binary mask to make it thicker according to c.thickness
         let src = cv2.matFromArray(height, width, cv2.CV_8U, binary);
         let dst = new cv2.Mat();
         cv2.morphologyEx(src, dst, cv2.MORPH_DILATE,
-            cv2.getStructuringElement(cv2.MORPH_ELLIPSE, new cv2.Size(3, 3)), new cv2.Point(-1, -1), c.thickness);
+            cv2.getStructuringElement(cv2.MORPH_ELLIPSE, new cv2.Size(3, 3)), new cv2.Point(-1, -1), c.thickness-0);
         src.delete();
 
+        // composite the thinned binary mask with the background to get the final image
         const mdata = dst.data;
-        idx = 0;
+        //const bdata = background.data;
+        idx = 0; let idx2 = 0;
         for (let j = 0; j < height; j++) {
-            for (let i = 0; i < width; i++, idx += 4) {
-                if (mdata[j*width + i] === 0)
-                    continue;
-                data[idx] = chex >> 16 & 0xff;
-                data[idx + 1] = chex >> 8 & 0xff;
-                data[idx + 2] = chex & 0xff;
+            for (let i = 0; i < width; i++, idx += 4, idx2 += 3) {
+                if (mdata[j * width + i] === 0) {
+                    /*if (0||(data[idx] << 16 | data[idx + 1] << 8 | data[idx + 2]) === chex) {
+                        data[idx] = bdata[idx2];
+                        data[idx + 1] = bdata[idx2 + 1];
+                        data[idx + 2] = bdata[idx2 + 2];
+                    }*/
+                } else {          
+                    data[idx] = chex >> 16 & 0xff;
+                    data[idx + 1] = chex >> 8 & 0xff;
+                    data[idx + 2] = chex & 0xff;
+                }
             }
         }
         dst.delete();
     }
+    //background.delete();
 
     console.timeEnd("doThinning");
 }
@@ -694,29 +706,6 @@ self.onmessage = async function (event) {
 
         if (0) {
             console.time("morphology");
-
-            /*let srcNoAlpha = new cv2.Mat();
-            let src = cv2.matFromImageData(imageData);
-            cv2.cvtColor(src, srcNoAlpha, cv2.COLOR_RGBA2RGB);
-            src.delete();
-            let dst = new cv2.Mat();
-
-            const iters = [0, 1, 1, 2, 3, 4, 3, 5];
-            const sizes = [0, 2, 3, 2, 2, 2, 3, 2];
-            const iter = iters[Math.min(iters.length - 1, minFilterSize)];
-            const size = sizes[Math.min(sizes.length - 1, minFilterSize)];
-
-            cv2.morphologyEx(srcNoAlpha, dst, cv2.MORPH_ERODE,
-                cv2.getStructuringElement(cv2.MORPH_CROSS, new cv2.Size(size, size)), new cv2.Point(-1, -1), iter);
-            srcNoAlpha.delete();
-
-            let dstRGBA = new cv2.Mat();
-            cv2.cvtColor(dst, dstRGBA, cv2.COLOR_RGB2RGBA);
-            dst.delete();
-            const newImageData = new ImageData(new Uint8ClampedArray(dstRGBA.data), dstRGBA.cols, dstRGBA.rows);
-            dstRGBA.delete();
-            imageData.data.set(newImageData.data);*/
-
             // convert to oldColors palette after morphology
             {
                 let colorLut = new Map();
@@ -821,14 +810,11 @@ self.onmessage = async function (event) {
                 const r = idata[idx];
                 const g = idata[idx + 1];
                 const b = idata[idx + 2];
-                //const a = idata[idx + 3];
-                const colorKey = (r << 16) | (g << 8) | b;
-                const c = colorMap[colorKey];
+                const c = colorMap[(r << 16) | (g << 8) | b];
                 if (c !== undefined) {
-                    const [newR, newG, newB] = [(c >> 16) & 0xff, (c >> 8) & 0xff, c & 0xff];
-                    idata[idx] = newR;
-                    idata[idx + 1] = newG;
-                    idata[idx + 2] = newB;
+                    idata[idx] = (c >> 16) & 0xff;
+                    idata[idx + 1] = (c >> 8) & 0xff;
+                    idata[idx + 2] = c & 0xff;
                 }
             }
         }

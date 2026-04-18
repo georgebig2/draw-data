@@ -200,7 +200,7 @@
     <progress max="1" min="0" value="0"></progress>
     <!-- Min Slider Control at top-right -->
     <div class="min-slider-control">
-        <label for="minSlider">min</label>
+        <label for="minSlider">thickness</label>
         <input type="range" id="minSlider" min="0" max="7" value="0" />
         <span id="minSliderValue">0</span>
     </div>
@@ -236,6 +236,7 @@
         const imageSrc = document.getElementById('imageSrc');
         let mainImageSrc = null;
         let curImage = null;
+        let updateImageTimeout = null;
 
         const fileButton = document.getElementById("fileButton");
         const progress = document.querySelector("progress");
@@ -483,14 +484,17 @@
             curImage.newColors = readPaletteGrid();
 
             const imageData = loadImage(curImage);
-            gridWorkers[0].postMessage({
-                type: 'updateImageWithPalette',
-                data: {
-                    imageData: imageData,
-                    oldColors: curImage.uniqueColors,
-                    newColors: curImage.newColors,
-                }
-            });
+            clearTimeout(updateImageTimeout);
+            updateImageTimeout = setTimeout(() => {
+                gridWorkers[0].postMessage({
+                    type: 'updateImageWithPalette',
+                    data: {
+                        imageData: imageData,
+                        oldColors: curImage.uniqueColors,
+                        newColors: curImage.newColors,
+                    }
+                });
+            }, 100);
         }
 
         var curColorBox = null;
