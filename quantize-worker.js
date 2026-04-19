@@ -479,7 +479,8 @@ function doThinning(cv2, imageData, newColors) {
         srcNoAlpha.delete();
     }*/
 
-    for (let c of newColors) {
+    for (let ci = newColors.length-1; ci >= 0; ci--) {
+        const c = newColors[ci];
         if (c.thickness === undefined || c.thickness === 0)
             continue;
 
@@ -596,7 +597,7 @@ function doThinning(cv2, imageData, newColors) {
         let src = cv2.matFromArray(height, width, cv2.CV_8U, binary);
         let dst = new cv2.Mat();
         cv2.morphologyEx(src, dst, cv2.MORPH_DILATE,
-            cv2.getStructuringElement(cv2.MORPH_ELLIPSE, new cv2.Size(3, 3)), new cv2.Point(-1, -1), c.thickness - 0);
+            cv2.getStructuringElement(cv2.MORPH_ELLIPSE, new cv2.Size(3, 3)), new cv2.Point(-1, -1), c.thickness-0);
         src.delete();
 
         // composite the thinned binary mask with the background to get the final image
@@ -702,7 +703,7 @@ self.onmessage = async function (event) {
             });
         }
     } else if (type === 'updateImageWithPalette') {
-        const { imageData, oldColors, newColors} = data;
+        const { imageData, oldColors, newColors } = data;
 
         if (0) {
             console.time("morphology");
