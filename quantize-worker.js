@@ -478,8 +478,18 @@ function doThinning(cv2, imageData, newColors) {
             cv2.getStructuringElement(cv2.MORPH_ELLIPSE, new cv2.Size(3, 3)), new cv2.Point(-1, -1), 5);
         srcNoAlpha.delete();
     }*/
-
-    for (let ci = newColors.length-1; ci >= 0; ci--) {
+    const srcData = cloneImageData(imageData);
+    const sdata = srcData.data;
+    // Sort colors by lightness (L value in LAB) from lightest to darkest
+    const sortedIndices = Array.from({length: newColors.length}, (_, i) => i).sort((a, b) => {
+        const rgbA = [(newColors[a].hex >> 16) & 0xff, (newColors[a].hex >> 8) & 0xff, newColors[a].hex & 0xff];
+        const rgbB = [(newColors[b].hex >> 16) & 0xff, (newColors[b].hex >> 8) & 0xff, newColors[b].hex & 0xff];
+        const labA = rgb2lab(rgbA);
+        const labB = rgb2lab(rgbB);
+        return labB[0] - labA[0]; // Descending: lightest to darkest
+    });
+    for (let cdx = 0; cdx < sortedIndices.length; cdx++) {
+        const ci = sortedIndices[cdx];
         const c = newColors[ci];
         if (c.thickness === undefined || c.thickness === 0)
             continue;
@@ -489,9 +499,9 @@ function doThinning(cv2, imageData, newColors) {
         let idx = 0;
         for (let j = 0; j < height; j++) {
             for (let i = 0; i < width; i++) {
-                const r = data[idx];
-                const g = data[idx + 1];
-                const b = data[idx + 2];
+                const r = sdata[idx];
+                const g = sdata[idx + 1];
+                const b = sdata[idx + 2];
                 const hex = (r << 16) | (g << 8) | b;
                 //const brightness = 0.299 * r + 0.587 * g + 0.114 * b;
                 binary[j * width + i] = (hex == chex) ? 1 : 0;
@@ -606,7 +616,7 @@ function doThinning(cv2, imageData, newColors) {
         idx = 0; let idx2 = 0;
         for (let j = 0; j < height; j++) {
             for (let i = 0; i < width; i++, idx += 4, idx2 += 3) {
-                if (mdata[j * width + i] === 0) {
+                if (mdata[j * width + i] === 0 && (sdata[idx] << 16 | sdata[idx + 1] << 8 | sdata[idx + 2]) !== chex) {
                     /*if (0||(data[idx] << 16 | data[idx + 1] << 8 | data[idx + 2]) === chex) {
                         data[idx] = bdata[idx2];
                         data[idx + 1] = bdata[idx2 + 1];
