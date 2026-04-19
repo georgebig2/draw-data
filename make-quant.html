@@ -241,7 +241,7 @@
         const fileButton = document.getElementById("fileButton");
         const progress = document.querySelector("progress");
         var fileInput = document.getElementById("fileInput");
-        
+
         const paletteSlider = document.getElementById('paletteSlider');
         const paletteSliderValue = document.getElementById('paletteSliderValue');
         const randomSlider = document.getElementById('randomSlider');
@@ -266,8 +266,6 @@
                 updateImageWithPalette();
             });
         }
-        //paletteSlider.hidden = true;
-        //paletteSliderValue.hidden = true;
         const filter = document.getElementById('filter');
 
         // Worker pool: fetch worker script, create Blob URL and spawn multiple workers
@@ -480,10 +478,9 @@
         function updateImageWithPalette() {
             if (!curImage)
                 return;
-            //const minFilterSize = (typeof minSlider !== 'undefined' && minSlider && minSlider.value) ? parseInt(minSlider.value, 10) : 0;
+            const imageData = loadImage(curImage);
             curImage.newColors = readPaletteGrid();
 
-            const imageData = loadImage(curImage);
             clearTimeout(updateImageTimeout);
             updateImageTimeout = setTimeout(() => {
                 gridWorkers[0].postMessage({
@@ -524,9 +521,12 @@
                     curColorBox = box;
                     minSlider.value = curColorBox.minSliderValue != undefined ? curColorBox.minSliderValue : 0;
                     minSliderValue.textContent = minSlider.value;
-
                     if (!e.shiftKey) {
-                        box.classList.toggle('hidden');
+                        curColorBox.variant = ((curColorBox.variant || 0) + 1) % 6;
+                        if (curColorBox.variant === 0)
+                            box.classList.remove('hidden');
+                        else
+                            box.classList.add('hidden');
                         updateImageWithPalette();
                     }
                 });
@@ -541,17 +541,16 @@
             colorInputs.forEach((input, index) => {
                 if (index < uniqueColors.length) {
                     const intColor = uniqueColors[index].hex;
-                    const a = (intColor >> 24) & 0xff;
-                    if (a === 0) {
-                        input.parentElement.classList.add('hidden');
-                    } else {
-                        input.parentElement.classList.remove('hidden');
-                    }
                     const r = (intColor >> 16) & 0xff;
                     const g = (intColor >> 8) & 0xff;
                     const b = intColor & 0xff;
                     input.value = `rgb(${r}, ${g}, ${b})`;
                     input.parentElement.minSliderValue = uniqueColors[index].thickness != undefined ? uniqueColors[index].thickness : 0;
+                    if (uniqueColors[index].variant != undefined && uniqueColors[index].variant !== 0) {
+                        input.parentElement.classList.add('hidden');
+                    } else {
+                        input.parentElement.classList.remove('hidden');
+                    }
                 } else {
                     input.value = 'rgb(255, 212, 183)';
                     input.parentElement.minSliderValue = 0;
@@ -566,15 +565,14 @@
             colorInputs.forEach((input) => {
                 if (input.value == null || input.value === '')
                     return;
-                const a = input.parentElement.classList.contains('hidden') ? 0 : 255;
+                //const a = input.parentElement.classList.contains('hidden') ? 0 : 255;
                 const hex = input.value.replace(/^#/, '');
-                const intColor = parseInt(hex, 16) | (a << 24);
-
+                const intColor = parseInt(hex, 16);// | (a << 24);
                 let thickness = 0;
                 if (input.parentElement.minSliderValue != undefined) {
                     thickness = parseInt(input.parentElement.minSliderValue, 10);
                 }
-                colors.push({ hex: intColor, thickness: thickness});
+                colors.push({ hex: intColor, thickness: thickness, variant: input.parentElement.variant != undefined ? input.parentElement.variant : 0 });
             });
             return colors;
         }

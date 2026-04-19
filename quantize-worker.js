@@ -596,7 +596,7 @@ function doThinning(cv2, imageData, newColors) {
         let src = cv2.matFromArray(height, width, cv2.CV_8U, binary);
         let dst = new cv2.Mat();
         cv2.morphologyEx(src, dst, cv2.MORPH_DILATE,
-            cv2.getStructuringElement(cv2.MORPH_ELLIPSE, new cv2.Size(3, 3)), new cv2.Point(-1, -1), c.thickness-0);
+            cv2.getStructuringElement(cv2.MORPH_ELLIPSE, new cv2.Size(3, 3)), new cv2.Point(-1, -1), c.thickness - 0);
         src.delete();
 
         // composite the thinned binary mask with the background to get the final image
@@ -611,7 +611,7 @@ function doThinning(cv2, imageData, newColors) {
                         data[idx + 1] = bdata[idx2 + 1];
                         data[idx + 2] = bdata[idx2 + 2];
                     }*/
-                } else {          
+                } else {
                     data[idx] = chex >> 16 & 0xff;
                     data[idx + 1] = chex >> 8 & 0xff;
                     data[idx + 2] = chex & 0xff;
@@ -702,7 +702,7 @@ self.onmessage = async function (event) {
             });
         }
     } else if (type === 'updateImageWithPalette') {
-        const { imageData, oldColors, newColors } = data;
+        const { imageData, oldColors, newColors} = data;
 
         if (0) {
             console.time("morphology");
@@ -767,32 +767,31 @@ self.onmessage = async function (event) {
 
         console.time("updateImageWithPalette");
         for (let i = 0; i < oldColors.length; i++) {
-            if (newColors[i].hex >> 24 === 0) {
-                let nearestIdx = -1;
-                let nearestDist = Number.MAX_VALUE;
-                const rA = (oldColors[i].hex >> 16) & 0xff; const gA = (oldColors[i].hex >> 8) & 0xff; const bA = oldColors[i].hex & 0xff;
-                for (let j = 0; j < newColors.length; j++) {
-                    if (newColors[j].hex >> 24 !== 0) {
-                        const rgbA = [(oldColors[i].hex >> 16) & 255, (oldColors[i].hex >> 8) & 255, oldColors[i].hex & 255];
-                        const rgbB = [(newColors[j].hex >> 16) & 255, (newColors[j].hex >> 8) & 255, newColors[j].hex & 255];
-                        const A = rgb2lab(rgbA);
-                        const B = rgb2lab(rgbB);
-                        const distance = (
-                            (A[0] - B[0]) * (A[0] - B[0]) +
-                            (A[1] - B[1]) * (A[1] - B[1]) +
-                            (A[2] - B[2]) * (A[2] - B[2])
-                        );
-                        if (distance < nearestDist) {
-                            nearestDist = distance;
-                            nearestIdx = j;
-                        }
-                    }
+            if (newColors[i].variant === 0)
+                continue;
+            const matches = [];
+            const rgbA = [(oldColors[i].hex >> 16) & 255, (oldColors[i].hex >> 8) & 255, oldColors[i].hex & 255];
+            const A = rgb2lab(rgbA);
+
+            for (let j = 0; j < oldColors.length; j++) {
+                if (newColors[j].variant === 0) {
+                    const rgbB = [(newColors[j].hex >> 16) & 255, (newColors[j].hex >> 8) & 255, newColors[j].hex & 255];
+                    const B = rgb2lab(rgbB);
+                    const distance = (
+                        (A[0] - B[0]) * (A[0] - B[0]) +
+                        (A[1] - B[1]) * (A[1] - B[1]) +
+                        (A[2] - B[2]) * (A[2] - B[2])
+                    );
+                    matches.push({ idx: j, distance });
                 }
-                if (nearestIdx !== -1) {
-                    newColors[i].hex = newColors[nearestIdx].hex;
-                } else {
-                    newColors[i].hex = oldColors[i].hex;
-                }
+            }
+
+            if (matches.length > 0) {
+                matches.sort((a, b) => a.distance - b.distance);
+                const rank = Math.max(0, Math.min(newColors[i].variant-1, matches.length - 1));
+                newColors[i].hex = newColors[matches[rank].idx].hex;
+            } else {
+                newColors[i].hex = oldColors[i].hex;
             }
         }
 
