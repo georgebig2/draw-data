@@ -682,7 +682,7 @@ self.onmessage = async function (event) {
                     let dst = new cv2.Mat();
 
                     //cv.pyrDown(srcNoAlpha, dst);
-                    cv2.pyrMeanShiftFiltering(srcNoAlpha, dst, 10, 10, 0);
+                    cv2.pyrMeanShiftFiltering(srcNoAlpha, dst, 15, 25, 0);
                     srcNoAlpha.delete();
 
                     let dstRGBA = new cv2.Mat();
