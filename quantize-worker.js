@@ -681,7 +681,6 @@ self.onmessage = async function (event) {
                     src.delete();
                     let dst = new cv2.Mat();
 
-                    //cv.pyrDown(srcNoAlpha, dst);
                     cv2.pyrMeanShiftFiltering(srcNoAlpha, dst, 15, 25, 0);
                     srcNoAlpha.delete();
 
@@ -800,7 +799,7 @@ self.onmessage = async function (event) {
             if (matches.length > 0) {
                 matches.sort((a, b) => a.distance - b.distance);
                 const rank = Math.max(0, Math.min(newColors[i].variant-1, matches.length - 1));
-                newColors[i].hex = newColors[matches[rank].idx].hex;
+                newColors[i] = newColors[matches[rank].idx];
             } else {
                 newColors[i].hex = oldColors[i].hex;
             }
