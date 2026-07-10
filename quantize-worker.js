@@ -445,43 +445,30 @@ function doThinning(cv2, imageData, newColors) {
     const width = imageData.width;
     const height = imageData.height;
 
-    /*let background = new cv2.Mat();
-    let recolors = new Set();
-    for (let c of newColors) {
-        if (c.thickness !== undefined && c.thickness > 0)
-            recolors.add(c.hex & 0xffffff);
-    }
-    if (1) {
-        let srcNoAlpha = new cv2.Mat();
-        let src = cv2.matFromImageData(imageData);
-        cv2.cvtColor(src, srcNoAlpha, cv2.COLOR_RGBA2RGB);
-        src.delete();
+    const LUT_PASS1 = new Uint8Array(256);
+    const LUT_PASS2 = new Uint8Array(256);
 
-        // recolor pixels to white if they are in recolors, to make them more likely to be eroded
-        const mdata = srcNoAlpha.data;
-        idx = 0;
-        for (let j = 0; j < height; j++) {
-            for (let i = 0; i < width; i++, idx += 3) {                
-                const r = mdata[idx];
-                const g = mdata[idx + 1];
-                const b = mdata[idx + 2];
-                const hex = (r << 16) | (g << 8) | b;
-                if (recolors.has(hex)) {
-                    mdata[idx] = 0;
-                    mdata[idx + 1] = 0;
-                    mdata[idx + 2] = 0;
-                }
-            }
+    for (let i = 0; i < 256; i++) {
+        // Decode byte bits into p2-p9 array values (1 or 0)
+        const p2 = (i >> 7) & 1; const p3 = (i >> 6) & 1; const p4 = (i >> 5) & 1;
+        const p5 = (i >> 4) & 1; const p6 = (i >> 3) & 1; const p7 = (i >> 2) & 1;
+        const p8 = (i >> 1) & 1; const p9 = i & 1;
+
+        const neighbors = p2 + p3 + p4 + p5 + p6 + p7 + p8 + p9;
+        const transitions = (p2 === 0 && p3 === 1) + (p3 === 0 && p4 === 1) + (p4 === 0 && p5 === 1) +
+            (p5 === 0 && p6 === 1) + (p6 === 0 && p7 === 1) + (p7 === 0 && p8 === 1) +
+            (p8 === 0 && p9 === 1) + (p9 === 0 && p2 === 1);
+
+        if (neighbors >= 2 && neighbors <= 6 && transitions === 1) {
+            if (p2 * p4 * p6 === 0 && p4 * p6 * p8 === 0) LUT_PASS1[i] = 1; // Mark for removal
+            if (p2 * p4 * p8 === 0 && p2 * p6 * p8 === 0) LUT_PASS2[i] = 1;
         }
+    }
 
-        cv2.morphologyEx(srcNoAlpha, background, cv2.MORPH_DILATE,
-            cv2.getStructuringElement(cv2.MORPH_ELLIPSE, new cv2.Size(3, 3)), new cv2.Point(-1, -1), 5);
-        srcNoAlpha.delete();
-    }*/
     const srcData = cloneImageData(imageData);
     const sdata = srcData.data;
     // Sort colors by lightness (L value in LAB) from lightest to darkest
-    const sortedIndices = Array.from({length: newColors.length}, (_, i) => i).sort((a, b) => {
+    const sortedIndices = Array.from({ length: newColors.length }, (_, i) => i).sort((a, b) => {
         const rgbA = [(newColors[a].hex >> 16) & 0xff, (newColors[a].hex >> 8) & 0xff, newColors[a].hex & 0xff];
         const rgbB = [(newColors[b].hex >> 16) & 0xff, (newColors[b].hex >> 8) & 0xff, newColors[b].hex & 0xff];
         const labA = rgb2lab(rgbA);
@@ -495,125 +482,127 @@ function doThinning(cv2, imageData, newColors) {
             continue;
 
         const chex = c.hex & 0xffffff;
-        const binary = new Uint8Array(width * height);
-        let idx = 0;
-        for (let j = 0; j < height; j++) {
-            for (let i = 0; i < width; i++) {
+        const width2 = width * 2 + 2;
+        const height2 = height * 2 + 2;
+        const binary = new Uint8Array(width2 * height2);
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                const idx = (y * width + x) * 4;
                 const r = sdata[idx];
                 const g = sdata[idx + 1];
                 const b = sdata[idx + 2];
                 const hex = (r << 16) | (g << 8) | b;
-                //const brightness = 0.299 * r + 0.587 * g + 0.114 * b;
-                binary[j * width + i] = (hex == chex) ? 1 : 0;
-                idx += 4;
+
+                if (hex === chex) {
+                    // Map 1 original pixel to a 2x2 block inside the padded matrix
+                    // Start row/col at 1 to account for the 1px protective border
+                    const targetX = 1 + (x * 2);
+                    const targetY = 1 + (y * 2);
+
+                    const row1 = targetY * width2;
+                    const row2 = (targetY + 1) * width2;
+
+                    binary[row1 + targetX] = 1;
+                    binary[row1 + targetX + 1] = 1;
+                    binary[row2 + targetX] = 1;
+                    binary[row2 + targetX + 1] = 1;
+                }
             }
         }
+
 
         // apply Zhang-Suen thinning algorithm
         let changed = true;
-        for (let pass = 0; pass < 4 && changed; pass++) {
+        const toRemoveQueue = new Uint32Array(width2 * height2);
+        let removeCount = 0;
+        for (let pass = 0; pass < 8 && changed; pass++) {
             changed = false;
-            const toRemove = [];
+            //const toRemove = [];
 
             // Pass 1
-            for (let j = 1; j < height - 1; j++) {
-                for (let i = 1; i < width - 1; i++) {
-                    if (binary[j * width + i] === 0) continue;
+            for (let j = 1; j < height2 - 1; j++) {
+                const row = j * width2;
+                for (let i = 1; i < width2 - 1; i++) {
+                    const idx = row + i;
+                    if (binary[idx] === 0) continue;
 
-                    const p2 = binary[(j - 1) * width + i];
-                    const p3 = binary[(j - 1) * width + i + 1];
-                    const p4 = binary[j * width + i + 1];
-                    const p5 = binary[(j + 1) * width + i + 1];
-                    const p6 = binary[(j + 1) * width + i];
-                    const p7 = binary[(j + 1) * width + i - 1];
-                    const p8 = binary[j * width + i - 1];
-                    const p9 = binary[(j - 1) * width + i - 1];
+                    const byteKey =
+                        (binary[idx - width2] << 7) | // p2 (North)
+                        (binary[idx - width2 + 1] << 6) | // p3 (NE)
+                        (binary[idx + 1] << 5) | // p4 (East)
+                        (binary[idx + width2 + 1] << 4) | // p5 (SE)
+                        (binary[idx + width2] << 3) | // p6 (South)
+                        (binary[idx + width2 - 1] << 2) | // p7 (SW)
+                        (binary[idx - 1] << 1) | // p8 (West)
+                        (binary[idx - width2 - 1]);       // p9 (NW)
 
-                    const neighbors = p2 + p3 + p4 + p5 + p6 + p7 + p8 + p9;
-                    // Condition 1: 2 <= N(p) <= 6
-                    if (neighbors < 2 || neighbors > 6) continue;
-
-                    // Condition 2: S(p) = 1 (number of transitions from 0 to 1)
-                    const transitions =
-                        (p2 === 0 && p3 === 1 ? 1 : 0) +
-                        (p3 === 0 && p4 === 1 ? 1 : 0) +
-                        (p4 === 0 && p5 === 1 ? 1 : 0) +
-                        (p5 === 0 && p6 === 1 ? 1 : 0) +
-                        (p6 === 0 && p7 === 1 ? 1 : 0) +
-                        (p7 === 0 && p8 === 1 ? 1 : 0) +
-                        (p8 === 0 && p9 === 1 ? 1 : 0) +
-                        (p9 === 0 && p2 === 1 ? 1 : 0);
-                    if (transitions !== 1) continue;
-
-                    // Condition 3: p2 * p4 * p6 = 0 (at least one of N, E, S is white)
-                    if (p2 * p4 * p6 !== 0) continue;
-
-                    // Condition 4: p4 * p6 * p8 = 0 (at least one of E, S, W is white)
-                    if (p4 * p6 * p8 !== 0) continue;
-
-                    toRemove.push(j * width + i);
+                    if (LUT_PASS1[byteKey] === 1)
+                        //toRemove.push(j * width2 + i);
+                        toRemoveQueue[removeCount++] = j * width2 + i;
                 }
             }
-            for (const idx of toRemove) {
+            /*for (const idx of toRemove) {
                 binary[idx] = 0;
                 changed = true;
+            }*/
+            for (let k = 0; k < removeCount; k++) {
+                binary[toRemoveQueue[k]] = 0;
+                changed = true;
             }
+            removeCount = 0;
 
             // Pass 2
-            toRemove.length = 0;
-            for (let j = 1; j < height - 1; j++) {
-                for (let i = 1; i < width - 1; i++) {
-                    if (binary[j * width + i] === 0) continue;
+            //toRemove.length = 0;
+            for (let j = 1; j < height2 - 1; j++) {
+                const row = j * width2;
+                for (let i = 1; i < width2 - 1; i++) {
+                    const idx = row + i;
+                    if (binary[idx] === 0) continue;
 
-                    const p2 = binary[(j - 1) * width + i];
-                    const p3 = binary[(j - 1) * width + i + 1];
-                    const p4 = binary[j * width + i + 1];
-                    const p5 = binary[(j + 1) * width + i + 1];
-                    const p6 = binary[(j + 1) * width + i];
-                    const p7 = binary[(j + 1) * width + i - 1];
-                    const p8 = binary[j * width + i - 1];
-                    const p9 = binary[(j - 1) * width + i - 1];
+                    const byteKey =
+                        (binary[idx - width2] << 7) | // p2 (North)
+                        (binary[idx - width2 + 1] << 6) | // p3 (NE)
+                        (binary[idx + 1] << 5) | // p4 (East)
+                        (binary[idx + width2 + 1] << 4) | // p5 (SE)
+                        (binary[idx + width2] << 3) | // p6 (South)
+                        (binary[idx + width2 - 1] << 2) | // p7 (SW)
+                        (binary[idx - 1] << 1) | // p8 (West)
+                        (binary[idx - width2 - 1]);       // p9 (NW)
 
-                    const neighbors = p2 + p3 + p4 + p5 + p6 + p7 + p8 + p9;
-                    if (neighbors < 2 || neighbors > 6) continue;
-
-                    const transitions =
-                        (p2 === 0 && p3 === 1 ? 1 : 0) +
-                        (p3 === 0 && p4 === 1 ? 1 : 0) +
-                        (p4 === 0 && p5 === 1 ? 1 : 0) +
-                        (p5 === 0 && p6 === 1 ? 1 : 0) +
-                        (p6 === 0 && p7 === 1 ? 1 : 0) +
-                        (p7 === 0 && p8 === 1 ? 1 : 0) +
-                        (p8 === 0 && p9 === 1 ? 1 : 0) +
-                        (p9 === 0 && p2 === 1 ? 1 : 0);
-                    if (transitions !== 1) continue;
-
-                    // Condition 3: p2 * p4 * p8 = 0 (at least one of N, E, W is white)
-                    if (p2 * p4 * p8 !== 0) continue;
-
-                    // Condition 4: p2 * p6 * p8 = 0 (at least one of N, S, W is white)
-                    if (p2 * p6 * p8 !== 0) continue;
-
-                    toRemove.push(j * width + i);
+                    if (LUT_PASS2[byteKey] === 1)
+                        //toRemove.push(j * width2 + i);
+                        toRemoveQueue[removeCount++] = j * width2 + i;
                 }
             }
-            for (const idx of toRemove) {
-                binary[idx] = 0;
+            for (let k = 0; k < removeCount; k++) {
+                binary[toRemoveQueue[k]] = 0;
                 changed = true;
             }
+            removeCount = 0;
         }
 
+
+        let src = cv2.matFromArray(height2, width2, cv2.CV_8U, binary);
+        const rect = new cv2.Rect(1, 1, width2 - 2, height2 - 2);
+        src = src.roi(rect);
+
         // dilate the thinned binary mask to make it thicker according to c.thickness
-        let src = cv2.matFromArray(height, width, cv2.CV_8U, binary);
-        let dst = new cv2.Mat();
-        cv2.morphologyEx(src, dst, cv2.MORPH_DILATE,
-            cv2.getStructuringElement(cv2.MORPH_ELLIPSE, new cv2.Size(3, 3)), new cv2.Point(-1, -1), c.thickness-0);
+        let dst2 = new cv2.Mat();
+        cv2.morphologyEx(src, dst2, cv2.MORPH_DILATE,
+            cv2.getStructuringElement(cv2.MORPH_ELLIPSE, new cv2.Size(3, 3)), new cv2.Point(-1, -1),
+            c.thickness - 0);//, cv2.BORDER_REPLICATE);//, new cv2.Scalar(0));
+        //cv2.thinning(src, dst2, cv2.THINNING_ZHANGSUEN); 
         src.delete();
+
+        let dst = new cv2.Mat();
+        cv2.resize(dst2, dst, new cv2.Size(width, height), 0, 0, cv2.INTER_AREA);
+        dst2.delete();
+
 
         // composite the thinned binary mask with the background to get the final image
         const mdata = dst.data;
         //const bdata = background.data;
-        idx = 0; let idx2 = 0;
+        let idx = 0; let idx2 = 0;
         for (let j = 0; j < height; j++) {
             for (let i = 0; i < width; i++, idx += 4, idx2 += 3) {
                 if (mdata[j * width + i] === 0 && (sdata[idx] << 16 | sdata[idx + 1] << 8 | sdata[idx + 2]) !== chex) {
@@ -681,7 +670,7 @@ self.onmessage = async function (event) {
                     src.delete();
                     let dst = new cv2.Mat();
 
-                    cv2.pyrMeanShiftFiltering(srcNoAlpha, dst, 15, 25, 0);
+                    cv2.pyrMeanShiftFiltering(srcNoAlpha, dst, 5, 25, 0);
                     srcNoAlpha.delete();
 
                     let dstRGBA = new cv2.Mat();
@@ -798,7 +787,7 @@ self.onmessage = async function (event) {
 
             if (matches.length > 0) {
                 matches.sort((a, b) => a.distance - b.distance);
-                const rank = Math.max(0, Math.min(newColors[i].variant-1, matches.length - 1));
+                const rank = Math.max(0, Math.min(newColors[i].variant - 1, matches.length - 1));
                 newColors[i] = newColors[matches[rank].idx];
             } else {
                 newColors[i].hex = oldColors[i].hex;
