@@ -441,13 +441,187 @@ function applyKMeansClustering(imgData, outputImgData, settings) {
 
 function doThinning(cv2, imageData, newColors) {
     console.time("doThinning");
+
+    const LUT_PASS1 = new Uint8Array(256);
+    const LUT_PASS2 = new Uint8Array(256);
+    for (let i = 0; i < 256; i++) {
+        // Decode byte bits into p2-p9 array values (1 or 0)
+        const p2 = (i >> 7) & 1; const p3 = (i >> 6) & 1; const p4 = (i >> 5) & 1;
+        const p5 = (i >> 4) & 1; const p6 = (i >> 3) & 1; const p7 = (i >> 2) & 1;
+        const p8 = (i >> 1) & 1; const p9 = i & 1;
+
+        const neighbors = p2 + p3 + p4 + p5 + p6 + p7 + p8 + p9;
+        const transitions = (p2 === 0 && p3 === 1) + (p3 === 0 && p4 === 1) + (p4 === 0 && p5 === 1) +
+            (p5 === 0 && p6 === 1) + (p6 === 0 && p7 === 1) + (p7 === 0 && p8 === 1) +
+            (p8 === 0 && p9 === 1) + (p9 === 0 && p2 === 1);
+
+        if (neighbors >= 2 && neighbors <= 6 && transitions === 1) {
+            if (p2 * p4 * p6 === 0 && p4 * p6 * p8 === 0) LUT_PASS1[i] = 1; // Mark for removal
+            if (p2 * p4 * p8 === 0 && p2 * p6 * p8 === 0) LUT_PASS2[i] = 1;
+        }
+    }
+
+    // Sort colors by lightness (L value in LAB) from lightest to darkest
+    const sortedIndices = Array.from({ length: newColors.length }, (_, i) => i).sort((a, b) => {
+        const rgbA = [(newColors[a].hex >> 16) & 0xff, (newColors[a].hex >> 8) & 0xff, newColors[a].hex & 0xff];
+        const rgbB = [(newColors[b].hex >> 16) & 0xff, (newColors[b].hex >> 8) & 0xff, newColors[b].hex & 0xff];
+        const labA = rgb2lab(rgbA);
+        const labB = rgb2lab(rgbB);
+        return labB[0] - labA[0]; // Descending: lightest to darkest
+    });
+
+    const data = imageData.data;
+    const width = imageData.width;
+    const height = imageData.height;
+    const sdata = new Uint8Array(data);
+
+    const paddedW = width + 2;
+    const paddedH = height + 2;
+    const maxPixels = paddedW * paddedH;
+
+    let currentQueue = new Int32Array(maxPixels);
+    let nextQueue = new Int32Array(maxPixels);
+    const toRemoveQueue = new Int32Array(maxPixels);
+
+    for (let cdx = 0; cdx < sortedIndices.length; cdx++) {
+        const ci = sortedIndices[cdx];
+        const c = newColors[ci];
+        if (c.thickness === undefined || c.thickness === 0) continue;
+
+        const chex = c.hex & 0xffffff;
+        const binary = new Uint8Array(maxPixels);
+        let queueCount = 0;
+
+        // Populate mask directly at 1x native scale
+        for (let y = 0; y < height; y++) {
+            const rowOffset = y * width * 4;
+            const targetYOffset = (y + 1) * paddedW;
+            for (let x = 0; x < width; x++) {
+                const idx = rowOffset + (x * 4);
+                if (((sdata[idx] << 16) | (sdata[idx + 1] << 8) | sdata[idx + 2]) === chex) {
+                    const binIdx = targetYOffset + (x + 1);
+                    binary[binIdx] = 255;
+                    currentQueue[queueCount++] = binIdx;
+                }
+            }
+        }
+
+        if (queueCount === 0) continue;
+
+        // Native 1x Zhang-Suen Skeletonization Pass
+        let changed = true;
+        for (let pass = 0; pass < 8 && changed; pass++) {
+            changed = false;
+            let removeCount = 0;
+            let nextQueueCount = 0;
+
+            for (let k = 0; k < queueCount; k++) {
+                const idx = currentQueue[k];
+                if (binary[idx] === 0) continue;
+
+                const key = ((binary[idx - paddedW] === 255 ? 1 : 0) << 7) |
+                    ((binary[idx - paddedW + 1] === 255 ? 1 : 0) << 6) |
+                    ((binary[idx + 1] === 255 ? 1 : 0) << 5) |
+                    ((binary[idx + paddedW + 1] === 255 ? 1 : 0) << 4) |
+                    ((binary[idx + paddedW] === 255 ? 1 : 0) << 3) |
+                    ((binary[idx + paddedW - 1] === 255 ? 1 : 0) << 2) |
+                    ((binary[idx - 1] === 255 ? 1 : 0) << 1) |
+                    (binary[idx - paddedW - 1] === 255 ? 1 : 0);
+
+                if (LUT_PASS1[key] === 1) toRemoveQueue[removeCount++] = idx;
+                else nextQueue[nextQueueCount++] = idx;
+            }
+            if (removeCount > 0) {
+                for (let k = 0; k < removeCount; k++) binary[toRemoveQueue[k]] = 0;
+                removeCount = 0; changed = true;
+            }
+            let tempQ = currentQueue; currentQueue = nextQueue; nextQueue = tempQ;
+            queueCount = nextQueueCount;
+            nextQueueCount = 0;
+
+            for (let k = 0; k < queueCount; k++) {
+                const idx = currentQueue[k];
+                if (binary[idx] === 0) continue;
+
+                const key = ((binary[idx - paddedW] === 255 ? 1 : 0) << 7) |
+                    ((binary[idx - paddedW + 1] === 255 ? 1 : 0) << 6) |
+                    ((binary[idx + 1] === 255 ? 1 : 0) << 5) |
+                    ((binary[idx + paddedW + 1] === 255 ? 1 : 0) << 4) |
+                    ((binary[idx + paddedW] === 255 ? 1 : 0) << 3) |
+                    ((binary[idx + paddedW - 1] === 255 ? 1 : 0) << 2) |
+                    ((binary[idx - 1] === 255 ? 1 : 0) << 1) |
+                    (binary[idx - paddedW - 1] === 255 ? 1 : 0);
+
+                if (LUT_PASS2[key] === 1) toRemoveQueue[removeCount++] = idx;
+                else nextQueue[nextQueueCount++] = idx;
+            }
+            if (removeCount > 0) {
+                for (let k = 0; k < removeCount; k++) binary[toRemoveQueue[k]] = 0;
+                removeCount = 0; changed = true;
+            }
+            tempQ = currentQueue; currentQueue = nextQueue; nextQueue = tempQ;
+            queueCount = nextQueueCount;
+        }
+
+        // Clean up the 1px protective container border
+        let fullSrc = cv2.matFromArray(paddedH, paddedW, cv2.CV_8U, binary);
+        const rect = new cv2.Rect(1, 1, paddedW - 2, paddedH - 2);
+        let roiSrc = fullSrc.roi(rect);
+        let src = roiSrc.clone();
+        fullSrc.delete();
+        roiSrc.delete();
+
+        // Invert the skeleton lines so background is white and line is black
+        // Distance Transform measures distance to the nearest ZERO (black pixel)
+        let invertedSkel = new cv2.Mat();
+        cv2.bitwise_not(src, invertedSkel);
+        src.delete();
+
+        // --- SUB-PIXEL THICKNESS REPLACEMENT FOR DILATE ---
+        let distMap = new cv2.Mat();
+        cv2.distanceTransform(invertedSkel, distMap, cv2.DIST_L2, cv2.DIST_MASK_5);
+        invertedSkel.delete();
+
+        // This replaces the old integer-based dilation steps!
+        // You can now pass precise sub-pixel decimal parameters (e.g. 1.5, 2.3, 3.85)
+        let subPixelThickness = (1 + c.thickness / 2);
+
+        let dst = new cv2.Mat();
+        // Threshold isolates pixels closer than your exact decimal value
+        cv2.threshold(distMap, dst, subPixelThickness, 255, cv2.THRESH_BINARY_INV);
+        distMap.delete();
+
+        // Convert float map back down to 8-bit array output format
+        let finalMask = new cv2.Mat();
+        dst.convertTo(finalMask, cv2.CV_8U);
+        dst.delete();
+
+        // Compositing Execution Pass
+        const mdata = finalMask.data;
+        for (let j = 0; j < height; j++) {
+            const mRow = j * width;
+            for (let i = 0; i < width; i++) {
+                if (mdata[mRow + i] === 255) {
+                    const idx = (mRow + i) * 4;
+                    data[idx] = (chex >> 16) & 0xff;
+                    data[idx + 1] = (chex >> 8) & 0xff;
+                    data[idx + 2] = chex & 0xff;
+                }
+            }
+        }
+        finalMask.delete();
+    }
+    console.timeEnd("doThinning");
+}
+
+function doThinning2(cv2, imageData, newColors) {
+    console.time("doThinning");
     const data = imageData.data;
     const width = imageData.width;
     const height = imageData.height;
 
     const LUT_PASS1 = new Uint8Array(256);
     const LUT_PASS2 = new Uint8Array(256);
-
     for (let i = 0; i < 256; i++) {
         // Decode byte bits into p2-p9 array values (1 or 0)
         const p2 = (i >> 7) & 1; const p3 = (i >> 6) & 1; const p4 = (i >> 5) & 1;
@@ -475,6 +649,14 @@ function doThinning(cv2, imageData, newColors) {
         const labB = rgb2lab(rgbB);
         return labB[0] - labA[0]; // Descending: lightest to darkest
     });
+
+    const width2 = width * 2 + 2;
+    const height2 = height * 2 + 2;
+    const maxPixels = width2 * height2;
+    const toRemoveQueue = new Uint32Array(maxPixels);
+    let currentQueue = new Int32Array(maxPixels);
+    let nextQueue = new Int32Array(maxPixels);
+
     for (let cdx = 0; cdx < sortedIndices.length; cdx++) {
         const ci = sortedIndices[cdx];
         const c = newColors[ci];
@@ -482,9 +664,9 @@ function doThinning(cv2, imageData, newColors) {
             continue;
 
         const chex = c.hex & 0xffffff;
-        const width2 = width * 2 + 2;
-        const height2 = height * 2 + 2;
         const binary = new Uint8Array(width2 * height2);
+        let queueCount = 0;
+
         for (let y = 0; y < height; y++) {
             for (let x = 0; x < width; x++) {
                 const idx = (y * width + x) * 4;
@@ -499,100 +681,145 @@ function doThinning(cv2, imageData, newColors) {
                     const targetX = 1 + (x * 2);
                     const targetY = 1 + (y * 2);
 
-                    const row1 = targetY * width2;
-                    const row2 = (targetY + 1) * width2;
+                    const r1 = targetY * width2 + targetX;
+                    const r2 = (targetY + 1) * width2 + targetX;
 
-                    binary[row1 + targetX] = 1;
-                    binary[row1 + targetX + 1] = 1;
-                    binary[row2 + targetX] = 1;
-                    binary[row2 + targetX + 1] = 1;
+                    binary[r1] = 1; binary[r1 + 1] = 1;
+                    binary[r2] = 1; binary[r2 + 1] = 1;
+
+
+                    // Add the coordinates of our upscaled points directly to the active sparse tracking queue
+                    currentQueue[queueCount++] = r1;
+                    currentQueue[queueCount++] = r1 + 1;
+                    currentQueue[queueCount++] = r2;
+                    currentQueue[queueCount++] = r2 + 1;
                 }
             }
         }
 
+        if (queueCount === 0) continue;
 
         // apply Zhang-Suen thinning algorithm
-        let changed = true;
-        const toRemoveQueue = new Uint32Array(width2 * height2);
-        let removeCount = 0;
-        for (let pass = 0; pass < 8 && changed; pass++) {
-            changed = false;
-            //const toRemove = [];
+        var skel;
+        if (1) {
+            let changed = true;
+            for (let pass = 0; pass < 8 && changed; pass++) {
+                changed = false;
+                let removeCount = 0;
+                let nextQueueCount = 0;
 
-            // Pass 1
-            for (let j = 1; j < height2 - 1; j++) {
-                const row = j * width2;
-                for (let i = 1; i < width2 - 1; i++) {
-                    const idx = row + i;
+                // Pass 1
+                for (let k = 0; k < queueCount; k++) {
+                    const idx = currentQueue[k];
                     if (binary[idx] === 0) continue;
 
-                    const byteKey =
-                        (binary[idx - width2] << 7) | // p2 (North)
-                        (binary[idx - width2 + 1] << 6) | // p3 (NE)
-                        (binary[idx + 1] << 5) | // p4 (East)
-                        (binary[idx + width2 + 1] << 4) | // p5 (SE)
-                        (binary[idx + width2] << 3) | // p6 (South)
-                        (binary[idx + width2 - 1] << 2) | // p7 (SW)
-                        (binary[idx - 1] << 1) | // p8 (West)
-                        (binary[idx - width2 - 1]);       // p9 (NW)
+                    const key = (binary[idx - width2] << 7) | // p2
+                        (binary[idx - width2 + 1] << 6) | // p3
+                        (binary[idx + 1] << 5) | // p4
+                        (binary[idx + width2 + 1] << 4) | // p5
+                        (binary[idx + width2] << 3) | // p6
+                        (binary[idx + width2 - 1] << 2) | // p7
+                        (binary[idx - 1] << 1) | // p8
+                        (binary[idx - width2 - 1]);       // p9
 
-                    if (LUT_PASS1[byteKey] === 1)
-                        //toRemove.push(j * width2 + i);
-                        toRemoveQueue[removeCount++] = j * width2 + i;
+                    if (LUT_PASS1[key] === 1) {
+                        toRemoveQueue[removeCount++] = idx;
+                    } else {
+                        nextQueue[nextQueueCount++] = idx; // Keeps structural inner core for the next round
+                    }
                 }
-            }
-            /*for (const idx of toRemove) {
-                binary[idx] = 0;
-                changed = true;
-            }*/
-            for (let k = 0; k < removeCount; k++) {
-                binary[toRemoveQueue[k]] = 0;
-                changed = true;
-            }
-            removeCount = 0;
+                for (let k = 0; k < removeCount; k++) {
+                    binary[toRemoveQueue[k]] = 0;
+                    changed = true;
+                }
+                removeCount = 0;
 
-            // Pass 2
-            //toRemove.length = 0;
-            for (let j = 1; j < height2 - 1; j++) {
-                const row = j * width2;
-                for (let i = 1; i < width2 - 1; i++) {
-                    const idx = row + i;
+                // Swap active queue references smoothly
+                let tempQ = currentQueue; currentQueue = nextQueue; nextQueue = tempQ;
+                queueCount = nextQueueCount;
+                nextQueueCount = 0;
+
+                // ================= PASS 2 =================
+                for (let k = 0; k < queueCount; k++) {
+                    const idx = currentQueue[k];
                     if (binary[idx] === 0) continue;
 
-                    const byteKey =
-                        (binary[idx - width2] << 7) | // p2 (North)
-                        (binary[idx - width2 + 1] << 6) | // p3 (NE)
-                        (binary[idx + 1] << 5) | // p4 (East)
-                        (binary[idx + width2 + 1] << 4) | // p5 (SE)
-                        (binary[idx + width2] << 3) | // p6 (South)
-                        (binary[idx + width2 - 1] << 2) | // p7 (SW)
-                        (binary[idx - 1] << 1) | // p8 (West)
-                        (binary[idx - width2 - 1]);       // p9 (NW)
+                    const key = (binary[idx - width2] << 7) |
+                        (binary[idx - width2 + 1] << 6) |
+                        (binary[idx + 1] << 5) |
+                        (binary[idx + width2 + 1] << 4) |
+                        (binary[idx + width2] << 3) |
+                        (binary[idx + width2 - 1] << 2) |
+                        (binary[idx - 1] << 1) |
+                        (binary[idx - width2 - 1]);
 
-                    if (LUT_PASS2[byteKey] === 1)
-                        //toRemove.push(j * width2 + i);
-                        toRemoveQueue[removeCount++] = j * width2 + i;
+                    if (LUT_PASS2[key] === 1) {
+                        toRemoveQueue[removeCount++] = idx;
+                    } else {
+                        nextQueue[nextQueueCount++] = idx;
+                    }
+                }
+                for (let k = 0; k < removeCount; k++) {
+                    binary[toRemoveQueue[k]] = 0;
+                    changed = true;
+                }
+                removeCount = 0;
+
+                tempQ = currentQueue; currentQueue = nextQueue; nextQueue = tempQ;
+                queueCount = nextQueueCount;
+            }
+            skel = cv2.matFromArray(height2, width2, cv2.CV_8U, binary);
+        }
+        else {
+            // 1. Convert your array data directly into a native OpenCV 8-bit Matrix
+            let src = cv2.matFromArray(height2, width2, cv2.CV_8U, binary);
+
+            // 2. Allocate structures for native iterative skeletonization
+            skel = cv2.Mat.zeros(src.rows, src.cols, cv2.CV_8U);
+            let temp = new cv2.Mat();
+            let eroded = new cv2.Mat();
+
+            // Use a cross/ellipse shaping element for clean topological line erosion
+            let element = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, new cv2.Size(3, 3));
+
+            let done = false;
+            for (let pass = 0; pass < 80 && !done; pass++) {
+                // Shave 1 pixel off the outer boundary of the shapes natively
+                cv2.erode(src, eroded, element);
+
+                // Isolate the pixels that disappeared during this erosion phase
+                cv2.dilate(eroded, temp, element);
+                cv2.subtract(src, temp, temp);
+
+                // Combine the isolated structural edges into our final skeleton frame
+                cv2.bitwise_or(skel, temp, skel);
+
+                // Move the eroded image into the source slot for the next pass
+                eroded.copyTo(src);
+
+                // If there are no white pixels left to erode, the skeleton is complete
+                if (cv2.countNonZero(src) === 0) {
+                    done = true;
                 }
             }
-            for (let k = 0; k < removeCount; k++) {
-                binary[toRemoveQueue[k]] = 0;
-                changed = true;
-            }
-            removeCount = 0;
+
+            // 3. Clear temporary tracking structures from WebAssembly memory
+            src.delete();
+            temp.delete();
+            eroded.delete();
+            element.delete();
         }
 
-
-        let src = cv2.matFromArray(height2, width2, cv2.CV_8U, binary);
         const rect = new cv2.Rect(1, 1, width2 - 2, height2 - 2);
-        src = src.roi(rect);
+        skel = skel.roi(rect);
 
         // dilate the thinned binary mask to make it thicker according to c.thickness
         let dst2 = new cv2.Mat();
-        cv2.morphologyEx(src, dst2, cv2.MORPH_DILATE,
+        cv2.morphologyEx(skel, dst2, cv2.MORPH_DILATE,
             cv2.getStructuringElement(cv2.MORPH_ELLIPSE, new cv2.Size(3, 3)), new cv2.Point(-1, -1),
             c.thickness - 0);//, cv2.BORDER_REPLICATE);//, new cv2.Scalar(0));
         //cv2.thinning(src, dst2, cv2.THINNING_ZHANGSUEN); 
-        src.delete();
+        skel.delete();
 
         let dst = new cv2.Mat();
         cv2.resize(dst2, dst, new cv2.Size(width, height), 0, 0, cv2.INTER_AREA);
