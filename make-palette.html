@@ -125,6 +125,10 @@
             <label for="enableL">languo</label>
             <input type="checkbox" id="enableL" checked />
         </div>
+        <div class="control-row">
+            <label for="skipLetters">skip</label>
+            <input type="text" id="skipLetters" name="skip" />
+        </div>
         <!-- <label for="paletteSlider">Poster:</label> -->
         <input type="range" id="paletteSlider" min="1" max="16" value="6" />
         <span id="paletteSliderValue">6</span>
@@ -152,6 +156,7 @@
         const randomSliderValue = document.getElementById('randomSliderValue');
         const enableG = document.getElementById('enableG');
         const enableL = document.getElementById('enableL');
+        const skipLettersInput = document.getElementById('skipLetters');
         if (paletteSlider && paletteSliderValue) {
             paletteSlider.addEventListener('input', () => {
                 paletteSliderValue.textContent = paletteSlider.value;
@@ -276,7 +281,8 @@
                                     paletteSize: paletteSize,
                                     rndFactor: rndFactor,
                                     enableG: enableG.checked,
-                                    enableL: enableL.checked
+                                    enableL: enableL.checked,
+                                    skipLetters: skipLettersInput ? skipLettersInput.value : ''
                                 }
                             });
                         }

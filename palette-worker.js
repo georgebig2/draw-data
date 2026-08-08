@@ -123,6 +123,7 @@ function posterizeInLab(levelsL, levelsA, levelsB) {
 }
 
 function makePaletteLab(palette, guangNa, lanGuo) {
+
     var paletteLab = [];
     for (let p = 0; p < palette.length; p++) {
         if (!guangNa && palette[p][1] > 0) continue;
@@ -137,7 +138,7 @@ function makePaletteLab(palette, guangNa, lanGuo) {
     return paletteLab;
 }
 
-function convertToPalette(imgData, paletteLab, random, rndFactor, one2one) {
+function convertToPalette(imgData, paletteLab, random, rndFactor_, one2one, colorsToSkip) {
     let pixels = new Map();
     const data = imgData.data;
     const dataLen = data.length;
@@ -161,6 +162,7 @@ function convertToPalette(imgData, paletteLab, random, rndFactor, one2one) {
         const g = (h >> 8) & 0xff;
         const b = h & 0xff;
         const rLab = rgb2lab([r, g, b]);
+        const rndFactor = colorsToSkip.has(h) ? 0 : rndFactor_;
 
         let minDistance = Number.MAX_VALUE;
         let closestColor = null;
@@ -389,14 +391,14 @@ self.onmessage = async function (event) {
     } else if (type === 'loadPalette') {
         let palette = loadPaletteCSV(data);
         if (!allPalettes || allPalettes.length === 0) {
-            for(let i = 0; i < palette.length; i++) {
+            for (let i = 0; i < palette.length; i++) {
                 //palette[i][1] *= -1;
             }
         }
         allPalettes = allPalettes.concat(palette);
         //self.postMessage({ type: 'paletteLoaded', data: palette });
     } else if (type === 'generatePalette') {
-        const { imageData, batch, paletteSize = 6, rndFactor = 3, enableG = true, enableL = true } = data;
+        const { imageData, batch, paletteSize = 6, rndFactor = 3, enableG = true, enableL = true, skipLetters = '' } = data;
 
         try {
             const random = new Random(Date.now() & 0x0fffffff);
@@ -406,15 +408,34 @@ self.onmessage = async function (event) {
             //const levels = 6;//Math.floor(random.next() * 4) + 4;//paletteSize;//Math.max(2, Math.round(Math.cbrt(paletteSize)));
             //const paletteLab2 = random.next() < 0.5 ?
             //    posterize(levels) : posterizeInLab(levels, levels, levels);
-            const paletteLab = makePaletteLab(allPalettes, enableG, enableL);
 
+            const cPaletteChars = "1234567890ABCdEFGhiKmnPQRSTuWXYZ*";
+            const skipSetIndexes = new Set(
+                String(skipLetters)
+                    .split(/[^0-9A-Za-z*]+/)
+                    .filter(Boolean)
+                    .map((token) => token.toUpperCase())
+                    .map((token) => cPaletteChars.toUpperCase().indexOf(token))
+                    .filter((index) => index >= 0)
+            );
+
+            let colorsToSkip = new Set();
+            for (let i = 0; i < rects.length; ++i) {
+                if (!skipSetIndexes.has(i))
+                    continue;
+                const colors = findRectColors(rects[i], imageData);
+                const h = colors[0][0];
+                colorsToSkip.add(h);
+            }
+
+            const paletteLab = makePaletteLab(allPalettes, enableG, enableL);
             const canvas = new OffscreenCanvas(imageData.width, imageData.height);
             const ctx = canvas.getContext('2d');
 
             for (let i = 0; i < batch; i++) {
 
                 let imageData2 = cloneImageData(imageData);
-                convertToPalette(imageData2, paletteLab, random, rndFactor * 300, true);
+                convertToPalette(imageData2, paletteLab, random, rndFactor * 300, true, colorsToSkip);
 
                 if (1) {
                     ctx.putImageData(imageData2, 0, 0);
